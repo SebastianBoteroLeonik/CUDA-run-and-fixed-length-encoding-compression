@@ -1,0 +1,4 @@
+.clangd
+sample-images
+*.o
+prog
