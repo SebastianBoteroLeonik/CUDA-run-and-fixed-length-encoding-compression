@@ -2,14 +2,14 @@
 #define RLE_H
 
 struct rle_chunk {
-  unsigned char *lengths;
-  unsigned char *values;
-  unsigned int array_lenght;
+  unsigned int array_length;
+  unsigned char lengths[1024];
+  unsigned char values[1024];
 };
 
 struct rle_data {
-  struct rle_chunk *chunks;
   unsigned int number_of_chunks;
+  struct rle_chunk *chunks;
 };
 #ifdef __cplusplus
 extern "C" {

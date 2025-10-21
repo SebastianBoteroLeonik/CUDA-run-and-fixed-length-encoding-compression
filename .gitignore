@@ -2,3 +2,6 @@
 sample-images
 *.o
 prog
+*.jpg
+*.jpeg
+*.png
