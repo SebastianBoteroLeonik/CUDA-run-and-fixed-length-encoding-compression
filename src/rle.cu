@@ -1,4 +1,5 @@
 #include "rle.h"
+// #include "rle_tests.h"
 #include <cuda.h>
 #include <device_launch_parameters.h>
 #include <stdio.h>
@@ -27,22 +28,13 @@ __device__ int warp_cumsum(int val, unsigned int mask) {
   // printf("%d, ", val);
   return val;
 }
-__device__ int block_cumsum(int val
-                            // , int total_len
-) {
-  int id = threadIdx.x;
-  int id_in_block = id % BLOCK_SIZE;
-  int lane_id = id % WARP_SIZE;
-  unsigned int mask = 0xffffffff;
 
-  // if ((id & 0xffffffe0) == ((total_len - 1) & 0xffffffe0)) {
-  //   mask <<= 32 - total_len % 32;
-  // }
-  val = warp_cumsum(val, mask);
+__device__ int block_cumsum(int val) {
   __shared__ int partial_sums[BLOCK_SIZE / WARP_SIZE];
-  if (lane_id == WARP_SIZE - 1
-      // || id == total_len - 1
-  ) {
+  int mask = 0xffffffff;
+  val = warp_cumsum(val, mask);
+  int id = threadIdx.x;
+  if (id % WARP_SIZE == WARP_SIZE - 1) {
     partial_sums[id / WARP_SIZE] = val;
   }
   __syncthreads();
@@ -59,8 +51,8 @@ __device__ int block_cumsum(int val
 __global__ void compression_kernel(unsigned char *data, unsigned int data_len,
                                    unsigned char jump_len,
                                    struct rle_data *rle) {
-  int id = threadIdx.x;
-  int id_in_block = id % BLOCK_SIZE;
+  int id = threadIdx.x + blockIdx.x * blockDim.x;
+  int id_in_block = id % threadIdx.x;
   int lane_id = id % WARP_SIZE;
 #define BLOCK_LEN                                                              \
   ((blockIdx.x == gridDim.x - 1) * ((data_len - 1) % BLOCK_SIZE + 1) +         \

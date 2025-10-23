@@ -28,7 +28,7 @@ struct imgRawImage *loadJpegImageFile(char *lpFilename) {
     fprintf(stderr, "%s:%u: Failed to read file %s\n", __FILE__, __LINE__,
             lpFilename);
 #endif
-    return NULL; /* ToDo */
+    return NULL;
   }
 
   info.err = jpeg_std_error(&err);
@@ -38,6 +38,9 @@ struct imgRawImage *loadJpegImageFile(char *lpFilename) {
   jpeg_read_header(&info, TRUE);
 
   jpeg_start_decompress(&info);
+  if (info.err->last_jpeg_message) {
+    info.err->emit_message(&info, info.err->last_jpeg_message);
+  }
   imgWidth = info.output_width;
   imgHeight = info.output_height;
   numComponents = info.num_components;
@@ -50,6 +53,12 @@ struct imgRawImage *loadJpegImageFile(char *lpFilename) {
 
   dwBufferBytes = imgWidth * imgHeight * 3; /* We only read RGB, not A */
   lpData = (unsigned char *)malloc(sizeof(unsigned char) * dwBufferBytes);
+  if (!lpData) {
+    jpeg_finish_decompress(&info);
+    jpeg_destroy_decompress(&info);
+    fclose(fHandle);
+    return NULL;
+  }
 
   lpNewImage = (struct imgRawImage *)malloc(sizeof(struct imgRawImage));
   lpNewImage->numComponents = numComponents;

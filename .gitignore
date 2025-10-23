@@ -1,7 +1,11 @@
 .clangd
 sample-images
 *.o
-prog
 *.jpg
 *.jpeg
 *.png
+build/
+bin/
+dependecies/
+dependencies
+tests/test
