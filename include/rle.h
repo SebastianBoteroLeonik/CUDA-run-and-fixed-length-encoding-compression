@@ -20,4 +20,16 @@ struct rle_data *compress_rle(unsigned char *data, unsigned int data_len,
 #ifdef __cplusplus
 }
 #endif // __cplusplus
+
+#define CUDA_ERROR_CHECK(expr)                                                 \
+  do {                                                                         \
+    cudaError_t cudaStatus = expr;                                             \
+    if (cudaStatus != cudaSuccess) {                                           \
+      fprintf(stderr, "%s failed! At line %d, in %s\nError: %s\n\t %s", #expr, \
+              __LINE__, __FILE__, cudaGetErrorName(cudaStatus),                \
+              cudaGetErrorString(cudaStatus));                                 \
+      exit(EXIT_FAILURE);                                                      \
+    }                                                                          \
+  } while (0)
+
 #endif // !RLE_H

@@ -29,8 +29,8 @@ TEST(jpeg, load_and_store_good_file) {
   char good_file_name[30] = "test_data/graphic.jpeg";
   imgRawImage_t *img = loadJpegImageFile(good_file_name);
   EXPECT_NE(img, nullptr);
-  std::cout << "height: " << img->height << " wifth: " << img->width
-            << " channels: " << img->numComponents;
+  // std::cout << "height: " << img->height << " wifth: " << img->width
+  //           << " channels: " << img->numComponents;
   EXPECT_EQ(img->height, 2627);
   EXPECT_EQ(img->width, 4348);
   EXPECT_EQ(img->numComponents, 3);
