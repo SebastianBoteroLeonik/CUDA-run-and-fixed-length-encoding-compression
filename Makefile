@@ -29,14 +29,18 @@ all: $(CDEP) $(CUDADEP) build
 
 .PHONY: clean
 clean:
-	-rm build/* bin/* dependencies/* tests/build/* tests/test
+	-rm -r build/ bin/ dependencies/ tests/build/ tests/test
 
 dependencies/%.d: src/%.c Makefile
+	mkdir -p dependencies
+	mkdir -p build
 	echo -n "build/" >$@
 	$(CC) $(CFLAGS) -M $< >>$@
 	echo "\t$(CC) $(CFLAGS) $< -o build/$*.o -c" >>$@
 
 dependencies/%.du: src/%.cu Makefile
+	mkdir -p dependencies
+	mkdir -p build
 	echo -n "build/" >$@
 	$(NVCC) $(NVCCFLAGS) -M $< >>$@
 	echo "\t$(NVCC) $(NVCCFLAGS) $< -o build/$*.o -dc" >>$@
@@ -44,6 +48,7 @@ dependencies/%.du: src/%.cu Makefile
 include $(CDEP) $(CUDADEP)
 
 build: $(OBJ)
+	mkdir -p bin
 	 $(NVCC) $(OBJ) -o $(EXECNAME) $(LDLIBS)
 
 run: build
@@ -53,8 +58,10 @@ CPPFLAGS=$(shell pkg-config gtest --cflags --libs) -I tests/include
 LDLIBS+=$(shell pkg-config gtest --libs --cflags) -ljpeg
 tests/build/%.o:NVCCFLAGS+=-I src
 tests/build/%.o:: tests/src/%.cu
+	mkdir -p tests/build
 	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) -dc $< -o $@
 tests/build/%.o:: tests/src/%.cpp
+	mkdir -p tests/build
 	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) -c $< -o $@
 
 tests/test: $(OBJ) $(TESTOBJ)
@@ -62,4 +69,5 @@ tests/test: $(OBJ) $(TESTOBJ)
 	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) $(LDLIBS) $(TESTOBJ) $(filter-out build/main.o, $(OBJ)) -o tests/test
 
 check: tests/test
+	mkdir -p tests/test_outputs
 	cd tests && ./test
