@@ -1,11 +1,9 @@
 .clangd
+*.bak
 sample-images
-*.o
-*.jpg
-*.jpeg
-*.png
 build/
 bin/
-dependecies/
-dependencies
+dependencies/
 tests/test
+tests/build
+tests/test_outputs
