@@ -54,148 +54,126 @@ __device__ int block_cumsum(int val) {
   return val;
 }
 
+#define DECLARE_IDS                                                            \
+  const long long global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;    \
+  const int id = threadIdx.x;                                                  \
+  const int block_id = blockIdx.x;
+
+__device__ void find_indexes_after_compression(const unsigned char *data,
+                                               int new_indexes[BLOCK_SIZE],
+                                               const int block_length) {
+  // int id = threadIdx.x;
+  // int global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
+  // int block_id = blockIdx.x;
+  DECLARE_IDS
+  bool is_diff_from_prev;
+  if (id) {
+    is_diff_from_prev = (data[global_thread_id] != data[global_thread_id - 1]);
+  } else {
+    is_diff_from_prev = 0;
+  }
+
+  new_indexes[id] = block_cumsum(is_diff_from_prev);
+  if (id == 0) {
+    new_indexes[block_length] = -1;
+  }
+}
+
 /*A kernel function used for run length encoding
  * params:
  * data - the data to be encoded
  * data_len - the number of bytes in data
  * rle - output variable
  */
-__global__ void rle_compression_kernel(unsigned char *data,
+__global__ void rle_compression_kernel(const unsigned char *data,
                                        unsigned int data_len,
                                        struct rle_chunk *rle) {
-  int global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
-  int id = threadIdx.x;
-  int block_id = blockIdx.x;
-  unsigned int block_length =
+  // const int global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
+  // const int id = threadIdx.x;
+  // const int block_id = blockIdx.x;
+  DECLARE_IDS
+  const unsigned int block_length =
       blockDim.x * ((blockIdx.x + 1) * blockDim.x <= data_len) +
       (data_len % blockDim.x) * ((blockIdx.x + 1) * blockDim.x > data_len);
-  // if (block_length < BLOCK_SIZE) {
-  //   printf("[%d]: len: %d, dim: %d, dl mod dim: %d\neq: %d, dl: %d, grid:
-  //   %d\n",
-  //          block_id, block_length, blockDim.x, data_len % blockDim.x,
-  //          (blockIdx.x + 1) * blockDim.x, data_len, gridDim.x);
-  // }
-  bool is_diff_from_prev;
 
   if (global_thread_id >= data_len) {
     return;
   }
-  if (id) {
-    is_diff_from_prev = (data[global_thread_id] != data[global_thread_id - 1]);
-  } else {
-    is_diff_from_prev = 0;
-  }
+
   __shared__ int cumsums[BLOCK_SIZE + 1];
-  cumsums[id] = block_cumsum(is_diff_from_prev);
-  if (id == 0) {
-    cumsums[block_length] = -1;
-  }
+  // bool is_diff_from_prev;
+  // if (id) {
+  //   is_diff_from_prev = (data[global_thread_id] != data[global_thread_id -
+  //   1]);
+  // } else {
+  //   is_diff_from_prev = 0;
+  // }
+  // cumsums[id] = block_cumsum(is_diff_from_prev);
+
+  // if (id == 0) {
+  //   cumsums[block_length] = -1;
+  // }
+  find_indexes_after_compression(data, cumsums, block_length);
+
   __syncthreads();
+
   bool is_last_in_chunk = (cumsums[id] != cumsums[id + 1]);
-  bool is_first_in_chunk =
-      (cumsums[id] != cumsums[(id - 1) % (block_length + 1)]);
+  bool is_first_in_chunk;
+  if (id) {
+    is_first_in_chunk = (cumsums[id] != cumsums[id - 1]);
+  } else {
+    is_first_in_chunk = 1;
+  }
+
   __shared__ int chunk_lengths[BLOCK_SIZE];
+  __shared__ unsigned char values[BLOCK_SIZE];
+
   if (is_last_in_chunk) {
     chunk_lengths[cumsums[id]] = id + 1;
   }
   __syncthreads();
+
   if (is_first_in_chunk) {
     chunk_lengths[cumsums[id]] -= id;
-    rle[block_id].values[cumsums[id]] = data[global_thread_id];
-    rle[block_id].lengths[cumsums[id]] = chunk_lengths[cumsums[id]];
+    values[cumsums[id]] = data[global_thread_id];
   }
+  __syncthreads();
+
+  __shared__ int previous_number_of_chunks;
   if (id == block_length - 1) {
-    rle[block_id].array_length = cumsums[id] + 1;
+    previous_number_of_chunks = cumsums[id] + 1;
+  }
+  __syncthreads();
+  if (id >= previous_number_of_chunks) {
+    return;
+  }
+  constexpr unsigned long long capacity =
+      (2 << (8 * sizeof(rle->lengths[0]) - 1));
+  int previous_chunk_len = chunk_lengths[id];
+  if (previous_chunk_len < 0) {
+    return;
+  }
+  char additional_bytes_needed = ((previous_chunk_len - 1) / capacity);
+  int offset = block_cumsum(additional_bytes_needed) - additional_bytes_needed;
+
+  __syncthreads();
+  for (int i = 0;
+       i <= additional_bytes_needed && i + offset + id < BLOCK_SIZE &&
+       id < previous_number_of_chunks;
+       i++) {
+    rle[block_id].values[id + i + offset] = values[id];
+    rle[block_id].lengths[id + i + offset] =
+        ((i + 1) * capacity > previous_chunk_len) *
+            (previous_chunk_len % capacity) +
+        ((i + 1) * capacity <= previous_chunk_len) * (capacity)-1;
+  }
+  __syncthreads();
+
+  if (id == previous_number_of_chunks - 1) {
+    rle[block_id].array_length =
+        previous_number_of_chunks + offset + additional_bytes_needed;
   }
 }
-// __global__ void compression_kernel(unsigned char *data, unsigned int
-// data_len,
-//                                    unsigned char jump_len,
-//                                    struct rle_data *rle) {
-//   int id = threadIdx.x + blockIdx.x * blockDim.x;
-//   int id_in_block = id % threadIdx.x;
-//   int lane_id = id % WARP_SIZE;
-// #define BLOCK_LEN \
-//   ((blockIdx.x == gridDim.x - 1) * ((data_len - 1) % BLOCK_SIZE + 1) + \
-//    (blockIdx.x != gridDim.x - 1) * BLOCK_SIZE)
-//   // printf("BLOCK_LEN = %d\n", BLOCK_LEN);
-//
-//   if (id >= data_len) {
-//     return;
-//   }
-//   char is_different;
-//   if (id > 0 && id < data_len) {
-//     is_different = (data[id] != data[id - 1]);
-//   } else {
-//     is_different = 0;
-//   }
-//   cumsums[id] = block_cumsum(is_different);
-//   __syncthreads();
-// #ifdef DEBUG
-//   if (id_in_block == 0) {
-//     printf("all cumsums = [");
-//     for (int i = 0; i < BLOCK_LEN; i++) {
-//       printf("%d, ", cumsums[i]);
-//     }
-//     printf("]\n");
-//   }
-// #endif /* ifdef DEBUG */
-//   bool is_last_in_seq = (cumsums[id_in_block] != cumsums[id_in_block + 1]);
-//   bool is_first_in_seq =
-//       (cumsums[id_in_block] != cumsums[(id_in_block - 1) % BLOCK_SIZE]);
-// #ifdef DEBUG
-//   if (id_in_block == 0) {
-//     printf("diffs = [");
-//     for (int i = 0; i < BLOCK_LEN; i++) {
-//       printf("%d, ", cumsums[i] != cumsums[i + 1]);
-//     }
-//     printf("]\n");
-//   }
-// #endif /* ifdef DEBUG */
-//   struct rle_chunk *my_chunk = rle->chunks + blockIdx.x;
-//   if (id_in_block == BLOCK_LEN - 1) {
-//     my_chunk->array_length = cumsums[id_in_block] + 1;
-//     // my_chunk->lengths = (unsigned char *)malloc(my_chunk->array_length);
-//     // my_chunk->values = (unsigned char *)malloc(my_chunk->array_length);
-//     // printf("my_chunk->array_length = %d\n", my_chunk->array_length);
-//   }
-//   __shared__ int lengths[BLOCK_SIZE];
-//   __syncthreads();
-//   if (is_last_in_seq) {
-//     my_chunk->values[cumsums[id_in_block]] = data[id];
-//     // my_chunk->lengths[cumsums[id_in_block]] = id_in_block + 1;
-//     lengths[cumsums[id_in_block]] = id_in_block + 1;
-//     // printf("%d, %d\n", cumsums[id_in_block], data[id]);
-//   }
-//   __syncthreads();
-//   if (is_first_in_seq) {
-//     // my_chunk->lengths[cumsums[id_in_block]] -= id_in_block;
-//     lengths[cumsums[id_in_block]] -= id_in_block;
-//     // printf("%d, %d\n", cumsums[id_in_block], data[id]);
-//   }
-//
-//   // if (id_in_block < my_chunk->array_length) {
-//   //   short to_shift = lengths[id_in_block] > 255;
-//   //   cumsum(int val)
-//   // }
-// #ifdef DEBUG
-//   __syncthreads();
-//   if (id_in_block == 0) {
-//     printf("rle values = [");
-//     for (int i = 0; i < my_chunk->array_length; i++) {
-//       printf("%d, ", my_chunk->values[i]);
-//     }
-//     printf("]\n");
-//   }
-//   if (id_in_block == 0) {
-//     printf("rle lengths = [");
-//     for (int i = 0; i < my_chunk->array_length; i++) {
-//       printf("%d, ", my_chunk->lengths[i]);
-//     }
-//     printf("]\n");
-//   }
-// #endif /* ifdef DEBUG */
-// }
 
 __global__ void choose_every_nth(unsigned char *data_in,
                                  unsigned char *data_out, unsigned int n,
