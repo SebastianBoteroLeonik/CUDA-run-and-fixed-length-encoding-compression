@@ -19,8 +19,7 @@ __global__ void run_index_finder(const unsigned char *data,
 }
 
 __global__ void rle_compression_kernel(const unsigned char *data,
-                                       unsigned int data_len,
-                                       struct rle_chunk *rle);
+                                       size_t data_len, struct rle_chunk *rle);
 
 TEST(run_length_encoding, warp_sum) {
   int vals[32];
@@ -154,11 +153,6 @@ TEST(run_length_encoding, find_index_after_compression) {
       EXPECT_LT(out.chunks[chunk].lengths[i], 256);                            \
       for (int j = 0; j <= out.chunks[chunk].lengths[i]; j++) {                \
         decomp_data[counter] = out.chunks[chunk].values[i];                    \
-        if (decomp_data[counter] != data[counter] || counter == 16383) {       \
-          /*printf("counter: %d, j: %d, i: %d, chunk: %d, len: %d, val: %d\n", \
-                 counter, j, i, chunk, out.chunks[chunk].lengths[i],           \
-                 out.chunks[chunk].values[i]);*/                               \
-        }                                                                      \
         counter++;                                                             \
         EXPECT_LE(counter, TEST_DATA_LEN);                                     \
       }                                                                        \
@@ -183,76 +177,51 @@ TEST(run_length_encoding, long_freq_compression_kernel){
 TEST(run_length_encoding, short_infreq_compression_kernel){
     TEST_COMPRESSION_KERNEL_TEMPLATE(4096, 1091)}
 
-TEST(run_length_encoding, long_infreq_compression_kernel) {
-  TEST_COMPRESSION_KERNEL_TEMPLATE((2048 * 32 + 9), 1091)
-}
+TEST(run_length_encoding, long_infreq_compression_kernel){
+    TEST_COMPRESSION_KERNEL_TEMPLATE((2048 * 32 + 9), 1091)}
 
-// TEST(run_length_encoding, compression_kernel) {
-//   // #define TEST_DATA_LEN (2048 * 2048 + 1)
-// #define TEST_DATA_LEN (512 * 32 + 2)
-// #define CEIL_DEV(num, div) ((num / div) + (num % div != 0))
-//   unsigned char *data = (unsigned char *)malloc(TEST_DATA_LEN);
-//   EXPECT_NE(data, nullptr);
-//   unsigned char *dev_data;
-//   for (int i = 0; i < TEST_DATA_LEN; i++) {
-//     data[i] = i / 91 + 2 + (i % 2909 == 0);
-//   }
-//   CUDA_ERROR_CHECK(cudaMalloc(&dev_data, TEST_DATA_LEN));
-//   CUDA_ERROR_CHECK(cudaMemcpy(dev_data, data,
-//                               sizeof(unsigned char) * TEST_DATA_LEN,
-//                               cudaMemcpyHostToDevice));
-//
-//   struct rle_chunk *compressed;
-//   struct rle_data out;
-//   out.number_of_chunks = CEIL_DEV(TEST_DATA_LEN, 1024);
-//   out.chunks = (struct rle_chunk *)malloc(sizeof(struct rle_chunk) *
-//                                           out.number_of_chunks);
-//   EXPECT_NE(out.chunks, nullptr);
-//   CUDA_ERROR_CHECK(
-//       cudaMalloc(&compressed, sizeof(struct rle_chunk) *
-//       out.number_of_chunks));
-//   rle_compression_kernel<<<out.number_of_chunks, 1024>>>(
-//       dev_data, TEST_DATA_LEN, compressed);
-//   CUDA_ERROR_CHECK(cudaDeviceSynchronize());
-//   CUDA_ERROR_CHECK(cudaFree(dev_data));
-//   CUDA_ERROR_CHECK(cudaMemcpy(out.chunks, compressed,
-//                               sizeof(struct rle_chunk) *
-//                               out.number_of_chunks, cudaMemcpyDeviceToHost));
-//   CUDA_ERROR_CHECK(cudaFree(compressed));
-//   unsigned char decomp_data[TEST_DATA_LEN];
-//   int counter = 0;
-//   EXPECT_GT(out.chunks[0].array_length, 0);
-//   // EXPECT_GT(out.chunks[1].array_length, 0);
-//   // EXPECT_GE((int)out.chunks[0].lengths[0], 0);
-//   // EXPECT_GE((int)out.chunks[1].lengths[0], 0);
-//   for (int chunk = 0; chunk < out.number_of_chunks; chunk++) {
-//     EXPECT_LE(out.chunks[chunk].array_length, 1024);
-//     EXPECT_GT(out.chunks[chunk].array_length, 0);
-//     for (int i = 0; i < out.chunks[chunk].array_length; i++) {
-//       EXPECT_LT(out.chunks[chunk].values[i], 256);
-//       EXPECT_GE(out.chunks[chunk].values[i], 0);
-//       EXPECT_GE(out.chunks[chunk].lengths[i], 0);
-//       EXPECT_LT(out.chunks[chunk].lengths[i], 256);
-//       for (int j = 0; j <= out.chunks[chunk].lengths[i]; j++) {
-//         decomp_data[counter] = out.chunks[chunk].values[i];
-//         if (decomp_data[counter] != data[counter] || counter == 16383) {
-//           printf("counter: %d, j: %d, i: %d, chunk: %d, len: %d, val: "
-//                  "%d\n",
-//                  counter, j, i, chunk, out.chunks[chunk].lengths[i],
-//                  out.chunks[chunk].values[i]);
-//         }
-//         counter++;
-//         EXPECT_LE(counter, TEST_DATA_LEN);
-//       }
-//     }
-//   }
-//   for (int i = 0; i < TEST_DATA_LEN; i++) {
-//     EXPECT_EQ(decomp_data[i], data[i]);
-//     // if (decomp_data[i] != data[i]) {
-//     //   printf("i:%d, \n");
-//     // }
-//   }
-//   EXPECT_EQ(counter, TEST_DATA_LEN);
-//   free(out.chunks);
-//   free(data);
-// }
+TEST(run_length_encoding, host_compress_rle) {
+  unsigned int TEST_DATA_LEN = (1 << 25);
+  // unsigned int TEST_DATA_LEN = 2048 * 2048 ;
+  printf("running on %dMB\n", TEST_DATA_LEN / (1024 * 1024));
+  unsigned int PERIOD = 19;
+  unsigned char *data = (unsigned char *)malloc(TEST_DATA_LEN);
+  EXPECT_NE(data, nullptr);
+  for (long long i = 0; i < TEST_DATA_LEN; i++) {
+    data[i] = i / (PERIOD) + 2 + (i % 1091 == 0);
+  }
+  struct rle_data *rle = compress_rle(data, TEST_DATA_LEN);
+  // EXPECT_NE(rle, nullptr);
+  unsigned char *decomp_data = (unsigned char *)malloc(TEST_DATA_LEN);
+  int counter = 0;
+  EXPECT_GT(rle->chunks[0].array_length, 0);
+  /* EXPECT_GT(rle->chunks[1].array_length, 0); */
+  /* EXPECT_GE((int)rle->chunks[0].lengths[0], 0); */
+  /* EXPECT_GE((int)rle->chunks[1].lengths[0], 0); */
+  for (int chunk = 0; chunk < rle->number_of_chunks; chunk++) {
+    EXPECT_LE(rle->chunks[chunk].array_length, 1024);
+    EXPECT_GT(rle->chunks[chunk].array_length, 0);
+    for (int i = 0; i < rle->chunks[chunk].array_length; i++) {
+      EXPECT_LT(rle->chunks[chunk].values[i], 256);
+      EXPECT_GE(rle->chunks[chunk].values[i], 0);
+      EXPECT_GE(rle->chunks[chunk].lengths[i], 0);
+      EXPECT_LT(rle->chunks[chunk].lengths[i], 256);
+      for (int j = 0; j <= rle->chunks[chunk].lengths[i]; j++) {
+        decomp_data[counter] = rle->chunks[chunk].values[i];
+        counter++;
+        EXPECT_LE(counter, TEST_DATA_LEN);
+      }
+    }
+  }
+  for (long long i = 0; i < TEST_DATA_LEN; i++) {
+    EXPECT_EQ(decomp_data[i], data[i]);
+    if (decomp_data[i] != data[i]) {
+      printf("i: %lld, period: %d\n", i, PERIOD);
+    }
+  }
+  EXPECT_EQ(counter, TEST_DATA_LEN);
+  free(data);
+  free(decomp_data);
+  free(rle->chunks);
+  free(rle);
+}

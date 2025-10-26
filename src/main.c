@@ -8,7 +8,7 @@ int main(int argc, char *argv[]) {
   imgRawImage_t *img = loadJpegImageFile("sample-images/docs/image-1.jpg");
   // imgRawImage_t *img = loadJpegImageFile("graphic.jpeg");
   struct rle_data *compressed =
-      compress_rle(img->lpData, img->height * img->width, 1);
+      compress_rle(img->lpData, img->height * img->width);
   FILE *outfile = fopen("outfile.rle", "wb");
   char channels = 3;
   // channels

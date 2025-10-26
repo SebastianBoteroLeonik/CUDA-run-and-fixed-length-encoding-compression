@@ -2,6 +2,7 @@ INCLUDEFLAGS=-I include
 
 CC=clang
 CFLAGS=-g -Wall $(INCLUDEFLAGS)
+# -fsanitize=address
 # LDFLAGS=-g -Wall
 LDLIBS=-lpthread -lm -ljpeg
 DEBUG=y
@@ -10,7 +11,8 @@ ifeq ($(DEBUG),y)
 endif
 
 NVCC=nvcc
-NVCCFLAGS=-O2 -arch=sm_89 $(DEBUGFLAGS) $(INCLUDEFLAGS)
+NVCCFLAGS=-O2 -arch=sm_89 -g -G $(DEBUGFLAGS) $(INCLUDEFLAGS)
+# -Xcompiler -fsanitize=address
 
 CFILES=$(wildcard src/*.c)
 CUDAFILES=$(wildcard src/*.cu)
@@ -27,9 +29,9 @@ EXECNAME=bin/prog
 
 all: $(CDEP) $(CUDADEP) build
 
-.PHONY: clean
+.PHONY: clean all check build
 clean:
-	-rm -r build/ bin/ dependencies/ tests/build/ tests/test
+	-rm -r build/ bin/ dependencies/ tests/build/ tests/test tests/test_outputs
 
 dependencies/%.d: src/%.c Makefile
 	mkdir -p dependencies
@@ -54,8 +56,8 @@ build: $(OBJ)
 run: build
 	./$(EXECNAME)
 
-CPPFLAGS=$(shell pkg-config gtest --cflags --libs) -I tests/include
-LDLIBS+=$(shell pkg-config gtest --libs --cflags) -ljpeg
+CPPFLAGS=$(shell pkg-config gtest_main --cflags --libs) -I tests/include
+LDLIBS+=$(shell pkg-config gtest_main --libs --cflags) -ljpeg -lgtest_main
 tests/build/%.o:NVCCFLAGS+=-I src
 tests/build/%.o:: tests/src/%.cu
 	mkdir -p tests/build

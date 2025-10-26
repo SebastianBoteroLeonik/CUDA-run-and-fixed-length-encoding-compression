@@ -1,5 +1,6 @@
 #ifndef RLE_H
 #define RLE_H
+#include <stdio.h>
 
 struct rle_chunk {
   unsigned int array_length;
@@ -14,8 +15,7 @@ struct rle_data {
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
-struct rle_data *compress_rle(unsigned char *data, unsigned int data_len,
-                              unsigned char jump_len);
+struct rle_data *compress_rle(unsigned char *data, size_t data_len);
 
 #ifdef __cplusplus
 }
@@ -25,8 +25,8 @@ struct rle_data *compress_rle(unsigned char *data, unsigned int data_len,
   do {                                                                         \
     cudaError_t cudaStatus = expr;                                             \
     if (cudaStatus != cudaSuccess) {                                           \
-      fprintf(stderr, "%s failed! At line %d, in %s\nError: %s\n\t %s", #expr, \
-              __LINE__, __FILE__, cudaGetErrorName(cudaStatus),                \
+      fprintf(stderr, "%s failed! At line %d, in %s\nError: %s\n\t %s\n",      \
+              #expr, __LINE__, __FILE__, cudaGetErrorName(cudaStatus),         \
               cudaGetErrorString(cudaStatus));                                 \
       exit(EXIT_FAILURE);                                                      \
     }                                                                          \
