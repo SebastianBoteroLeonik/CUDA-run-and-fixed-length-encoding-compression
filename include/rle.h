@@ -9,9 +9,11 @@ struct rle_chunk {
 };
 
 struct rle_data {
+  unsigned long long total_data_length;
   unsigned int number_of_chunks;
   struct rle_chunk *chunks;
 };
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
