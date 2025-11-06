@@ -1,0 +1,79 @@
+#include "rle.h"
+#include <gtest/gtest.h>
+#include <stdio.h>
+
+extern "C" {
+#include "file_io.h"
+}
+
+void test_file_equality(char *filename1, char *filename2) {
+  FILE *f1 = fopen(filename1, "r");
+  EXPECT_NE(f1, nullptr);
+  if (!f1) {
+    perror("f1");
+    return;
+  }
+  FILE *f2 = fopen(filename2, "r");
+  EXPECT_NE(f2, nullptr);
+  if (!f2) {
+    perror("f2");
+    return;
+  }
+  int char_read_f1 = 0;
+  int char_read_f2 = 0;
+  do {
+    EXPECT_EQ(char_read_f1, char_read_f2);
+  } while ((char_read_f1 = fgetc(f1)) != EOF &&
+           (char_read_f2 = fgetc(f2)) != EOF);
+  fclose(f1);
+  fclose(f2);
+}
+
+/*
+[ 1, 1, 1, 2, 2, 255, 255, 124 ]
+||
+V
+[1, 2] [255, 124]
+[2, 1] [1, 0]
+ */
+TEST(file_io, write_rle) {
+  char file_name[40] = "test_outputs/write_file.rle";
+  struct rle_data data;
+  data.total_data_length = 8;
+  data.number_of_chunks = 2;
+  struct rle_chunks *chunks = make_host_rle_chunks(data.number_of_chunks, 2);
+  chunks->chunk_starts[0] = 0;
+  chunks->chunk_starts[1] = 2;
+  chunks->chunk_lengths[0] = 2;
+  chunks->chunk_lengths[1] = 2;
+  chunks->repetitions[chunks->chunk_starts[0]] = 2;
+  chunks->repetitions[chunks->chunk_starts[0] + 1] = 1;
+  chunks->repetitions[chunks->chunk_starts[1]] = 1;
+  chunks->repetitions[chunks->chunk_starts[1] + 1] = 0;
+  chunks->values[chunks->chunk_starts[0]] = 1;
+  chunks->values[chunks->chunk_starts[0] + 1] = 2;
+  chunks->values[chunks->chunk_starts[1]] = 255;
+  chunks->values[chunks->chunk_starts[1] + 1] = 124;
+  data.chunks = chunks;
+  write_rle_to_file(&data, file_name);
+  char true_file[40] = "test_data/example_file.rle";
+  test_file_equality(file_name, true_file);
+}
+
+TEST(file_io, read_rle) {
+  char file_name[40] = "test_data/example_file.rle";
+  struct rle_data *data = read_rle_from_file(file_name);
+  EXPECT_EQ(data->total_data_length, 8);
+  EXPECT_EQ(data->compressed_array_length, 4);
+  EXPECT_EQ(data->number_of_chunks, 1);
+  EXPECT_EQ(data->chunks->chunk_lengths[0], 4);
+  EXPECT_EQ(data->chunks->chunk_starts[0], 0);
+  EXPECT_EQ(data->chunks->repetitions[0], 2);
+  EXPECT_EQ(data->chunks->repetitions[1], 1);
+  EXPECT_EQ(data->chunks->repetitions[2], 1);
+  EXPECT_EQ(data->chunks->repetitions[3], 0);
+  EXPECT_EQ(data->chunks->values[0], 1);
+  EXPECT_EQ(data->chunks->values[1], 2);
+  EXPECT_EQ(data->chunks->values[2], 255);
+  EXPECT_EQ(data->chunks->values[3], 124);
+}

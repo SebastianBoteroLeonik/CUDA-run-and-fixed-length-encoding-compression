@@ -1,0 +1,84 @@
+#include "file_io.h"
+#include "rle.h"
+#include <stdio.h>
+#include <stdlib.h>
+
+#define ERR(source)                                                            \
+  (fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), perror(source),             \
+   exit(EXIT_FAILURE))
+
+void write_rle_to_file(struct rle_data *data, char *file_name) {
+  FILE *fileptr = fopen(file_name, "wb");
+  if (!fileptr) {
+    ERR("fopen");
+  }
+  int wc; // written count
+  wc = fwrite(&(data->total_data_length), sizeof(data->total_data_length), 1,
+              fileptr);
+  if (wc != 1)
+    ERR("fwrite total_data_length");
+  data->compressed_array_length = 0;
+  fpos_t position;
+  fgetpos(fileptr, &position);
+  wc = fwrite(&(data->compressed_array_length),
+              sizeof(data->compressed_array_length), 1, fileptr);
+  if (wc != 1)
+    ERR("fwrite compressed_array_length");
+  unsigned long long accumulator = 0;
+  for (int i = 0; i < data->number_of_chunks; i++) {
+    wc = fwrite(data->chunks->repetitions + data->chunks->chunk_starts[i],
+                sizeof(*data->chunks->repetitions),
+                data->chunks->chunk_lengths[i], fileptr);
+    if (wc != data->chunks->chunk_lengths[i])
+      ERR("fwrite data->chunk->lengths");
+  }
+  for (int i = 0; i < data->number_of_chunks; i++) {
+    wc = fwrite(data->chunks->values + data->chunks->chunk_starts[i],
+                sizeof(*data->chunks->values), data->chunks->chunk_lengths[i],
+                fileptr);
+    if (wc != data->chunks->chunk_lengths[i])
+      ERR("fwrite data->chunk->lengths");
+    accumulator += data->chunks->chunk_lengths[i];
+  }
+  data->compressed_array_length = accumulator;
+  fsetpos(fileptr, &position);
+  wc = fwrite(&(data->compressed_array_length),
+              sizeof(data->compressed_array_length), 1, fileptr);
+  if (wc != 1)
+    ERR("fwrite compressed_array_length");
+  if (fclose(fileptr))
+    ERR("fclose");
+}
+
+struct rle_data *read_rle_from_file(char *file_name) {
+  struct rle_data *data = (struct rle_data *)malloc(sizeof(struct rle_data));
+  FILE *fileptr = fopen(file_name, "rb");
+  if (!fileptr) {
+    ERR("fopen");
+  }
+  int rc; // read count
+  rc = fread(&(data->total_data_length), sizeof(data->total_data_length), 1,
+             fileptr);
+  if (rc != 1)
+    ERR("fread total_data_length");
+  rc = fread(&(data->compressed_array_length),
+             sizeof(data->compressed_array_length), 1, fileptr);
+  if (rc != 1)
+    ERR("fread compressed_array_length");
+  data->chunks = make_host_rle_chunks(1, data->compressed_array_length);
+  data->number_of_chunks = 1;
+  data->chunks->chunk_starts[0] = 0;
+  data->chunks->chunk_lengths[0] = data->compressed_array_length;
+  rc = fread(data->chunks->repetitions, sizeof(*data->chunks->repetitions),
+             data->compressed_array_length, fileptr);
+  if (rc != data->compressed_array_length)
+    ERR("fread data->chunk->repetitions");
+  rc = fread(data->chunks->values, sizeof(*data->chunks->values),
+             data->compressed_array_length, fileptr);
+  if (rc != data->compressed_array_length)
+    ERR("fread data->chunk->values");
+  if (fclose(fileptr))
+    ERR("fclose");
+  return data;
+  return NULL;
+}

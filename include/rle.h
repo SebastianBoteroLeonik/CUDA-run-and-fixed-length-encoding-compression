@@ -11,6 +11,7 @@ struct rle_chunks {
 
 struct rle_data {
   unsigned long long total_data_length;
+  unsigned long long compressed_array_length;
   unsigned int number_of_chunks;
   struct rle_chunks *chunks;
 };
