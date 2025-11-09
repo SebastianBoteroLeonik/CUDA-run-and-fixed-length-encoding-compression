@@ -2,36 +2,39 @@
 #define RLE_H
 #include <stdio.h>
 
-struct rle_chunk {
-  unsigned int array_length;
-  unsigned char lengths[1024];
-  unsigned char values[1024];
+struct rle_chunks {
+  unsigned long *chunk_starts;
+  unsigned int *chunk_lengths;
+  unsigned char *repetitions;
+  unsigned char *values;
 };
 
 struct rle_data {
   unsigned long long total_data_length;
   unsigned int number_of_chunks;
-  struct rle_chunk *chunks;
+  struct rle_chunks *chunks;
 };
 
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
+
+enum cpyKind { HostToDevice, HostToHost, DeviceToHost };
+
 struct rle_data *compress_rle(unsigned char *data, size_t data_len);
+
+struct rle_chunks *make_device_rle_chunks(size_t number_of_chunks,
+                                          size_t chunk_capacity);
+
+struct rle_chunks *make_host_rle_chunks(size_t number_of_chunks,
+                                        size_t chunk_capacity);
+
+void copy_rle_chunks(struct rle_chunks *src, struct rle_chunks *dst,
+                     enum cpyKind kind, size_t number_of_chunks,
+                     ssize_t total_array_length);
 
 #ifdef __cplusplus
 }
 #endif // __cplusplus
-
-#define CUDA_ERROR_CHECK(expr)                                                 \
-  do {                                                                         \
-    cudaError_t cudaStatus = expr;                                             \
-    if (cudaStatus != cudaSuccess) {                                           \
-      fprintf(stderr, "%s failed! At line %d, in %s\nError: %s\n\t %s\n",      \
-              #expr, __LINE__, __FILE__, cudaGetErrorName(cudaStatus),         \
-              cudaGetErrorString(cudaStatus));                                 \
-      exit(EXIT_FAILURE);                                                      \
-    }                                                                          \
-  } while (0)
 
 #endif // !RLE_H

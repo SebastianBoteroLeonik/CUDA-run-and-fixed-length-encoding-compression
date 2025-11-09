@@ -33,7 +33,8 @@ __device__ void find_indexes_after_compression(const unsigned char *data,
  * rle - output variable
  */
 __global__ void rle_compression_kernel(const unsigned char *data,
-                                       size_t data_len, struct rle_chunk *rle) {
+                                       size_t data_len,
+                                       struct rle_chunks *rle) {
   // const int global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
   // const int id = threadIdx.x;
   // const int block_id = blockIdx.x;
@@ -96,7 +97,7 @@ __global__ void rle_compression_kernel(const unsigned char *data,
     return;
   }
   constexpr unsigned long long capacity =
-      (2 << (8 * sizeof(rle->lengths[0]) - 1));
+      (2 << (8 * sizeof(rle->repetitions[0]) - 1));
   int previous_chunk_len = chunk_lengths[id];
   if (previous_chunk_len < 0) {
     return;
@@ -109,8 +110,8 @@ __global__ void rle_compression_kernel(const unsigned char *data,
        i <= additional_bytes_needed && i + offset + id < BLOCK_SIZE &&
        id < previous_number_of_chunks;
        i++) {
-    rle[block_id].values[id + i + offset] = values[id];
-    rle[block_id].lengths[id + i + offset] =
+    rle->values[block_id * blockDim.x + id + i + offset] = values[id];
+    rle->repetitions[block_id * blockDim.x + id + i + offset] =
         ((i + 1) * capacity > previous_chunk_len) *
             (previous_chunk_len % capacity) +
         ((i + 1) * capacity <= previous_chunk_len) * (capacity)-1;
@@ -118,18 +119,20 @@ __global__ void rle_compression_kernel(const unsigned char *data,
   __syncthreads();
 
   if (id == previous_number_of_chunks - 1) {
-    rle[block_id].array_length =
+    rle->chunk_lengths[block_id] =
         previous_number_of_chunks + offset + additional_bytes_needed;
+    rle->chunk_starts[block_id] = block_id * blockDim.x;
   }
 }
 
-__global__ void choose_every_nth(unsigned char *data_in,
-                                 unsigned char *data_out, unsigned int n,
-                                 unsigned int data_len, unsigned int offset) {
-  if (threadIdx.x * n + offset < data_len) {
-    data_out[threadIdx.x] = data_in[threadIdx.x * n + offset] & 0b11111110;
-  }
-}
+// __global__ void choose_every_nth(unsigned char *data_in,
+//                                  unsigned char *data_out, unsigned int n,
+//                                  unsigned int data_len, unsigned int offset)
+//                                  {
+//   if (threadIdx.x * n + offset < data_len) {
+//     data_out[threadIdx.x] = data_in[threadIdx.x * n + offset] & 0b11111110;
+//   }
+// }
 
 #define CEIL_DEV(num, div) (((num) / (div)) + ((num) % (div) != 0))
 
@@ -148,22 +151,54 @@ __host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
   CUDA_ERROR_CHECK(cudaMalloc(&dev_data, sizeof(*data) * data_len));
   CUDA_ERROR_CHECK(cudaMemcpy(dev_data, data, sizeof(*data) * data_len,
                               cudaMemcpyHostToDevice));
-  struct rle_chunk *dev_chunks;
-  CUDA_ERROR_CHECK(
-      cudaMalloc(&dev_chunks, sizeof(*dev_chunks) * out->number_of_chunks));
+  struct rle_chunks *dev_chunks =
+      make_device_rle_chunks(out->number_of_chunks, BLOCK_SIZE);
+  // unsigned char *dev_arena;
+  // CUDA_ERROR_CHECK(
+  //     cudaMalloc(&dev_arena, 2 * BLOCK_SIZE * out->number_of_chunks));
+  // CUDA_ERROR_CHECK(
+  //     cudaMalloc(&dev_chunks, sizeof(*dev_chunks) * out->number_of_chunks));
+  // for (int i = 0; i < out->number_of_chunks; i++) {
+  //   unsigned char *ptr;
+  //   // CUDA_ERROR_CHECK(cudaMalloc(&ptr, BLOCK_SIZE));
+  //   ptr = dev_arena + 2 * BLOCK_SIZE * i;
+  //   CUDA_ERROR_CHECK(cudaMemcpy(&(dev_chunks[i].lengths), &ptr, sizeof(ptr),
+  //                               cudaMemcpyHostToDevice));
+  //   // CUDA_ERROR_CHECK(cudaMalloc(&ptr, BLOCK_SIZE));
+  //   ptr = dev_arena + 2 * BLOCK_SIZE * i + BLOCK_SIZE;
+  //   CUDA_ERROR_CHECK(cudaMemcpy(&(dev_chunks[i].values), &ptr, sizeof(ptr),
+  //                               cudaMemcpyHostToDevice));
+  // }
   rle_compression_kernel<<<out->number_of_chunks, BLOCK_SIZE>>>(data, data_len,
                                                                 dev_chunks);
   CUDA_ERROR_CHECK(cudaDeviceSynchronize());
   CUDA_ERROR_CHECK(cudaFree(dev_data));
-  out->chunks =
-      (struct rle_chunk *)malloc(sizeof(*out->chunks) * out->number_of_chunks);
-  if (!out->chunks) {
-    perror("malloc chunks");
-    return NULL;
-  }
-  CUDA_ERROR_CHECK(cudaMemcpy(out->chunks, dev_chunks,
-                              sizeof(*dev_chunks) * out->number_of_chunks,
-                              cudaMemcpyDeviceToHost));
+  out->chunks = make_host_rle_chunks(out->number_of_chunks, BLOCK_SIZE);
+
+  // if (!out->chunks) {
+  //   perror("malloc chunks");
+  //   return NULL;
+  // }
+  // CUDA_ERROR_CHECK(cudaMemcpy(out->chunks, dev_chunks,
+  //                             sizeof(*dev_chunks) * out->number_of_chunks,
+  //                             cudaMemcpyDeviceToHost));
+  // for (int i = 0; i < out->number_of_chunks; i++) {
+  //   unsigned char *old = out->chunks[i].repetitions;
+  //   out->chunks[i].repetitions =
+  //       (unsigned char *)malloc(out->chunks[i].chunk_lengths[i]);
+  //   CUDA_ERROR_CHECK(cudaMemcpy(out->chunks[i].repetitions, old,
+  //        compile_commands.json out->chunks[i].chunk_lengths,
+  //                               cudaMemcpyDeviceToHost));
+  //   old = out->chunks[i].values;
+  //   out->chunks[i].values =
+  //       (unsigned char *)malloc(out->chunks[i].chunk_lengths);
+  //   CUDA_ERROR_CHECK(cudaMemcpy(out->chunks[i].values, old,
+  //                               out->chunks[i].chunk_lengths,
+  //                               cudaMemcpyDeviceToHost));
+  // }
+  copy_rle_chunks(dev_chunks, out->chunks, DeviceToHost, out->number_of_chunks,
+                  out->number_of_chunks * BLOCK_SIZE);
+
   CUDA_ERROR_CHECK(cudaFree(dev_chunks));
   return out;
 }

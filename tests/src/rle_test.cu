@@ -1,5 +1,6 @@
+#include "cuda_utils.cuh"
+#include "rle.h"
 #include <gtest/gtest.h>
-#include <rle.h>
 #include <rle_tests.h>
 
 __global__ void run_warp_cumsum(int *vals) {
@@ -19,7 +20,7 @@ __global__ void run_index_finder(const unsigned char *data,
 }
 
 __global__ void rle_compression_kernel(const unsigned char *data,
-                                       size_t data_len, struct rle_chunk *rle);
+                                       size_t data_len, struct rle_chunks *rle);
 
 TEST(run_length_encoding, warp_sum) {
   int vals[32];
@@ -121,38 +122,41 @@ TEST(run_length_encoding, find_index_after_compression) {
   CUDA_ERROR_CHECK(cudaMemcpy(dev_data, data,                                  \
                               sizeof(unsigned char) * TEST_DATA_LEN,           \
                               cudaMemcpyHostToDevice));                        \
-  struct rle_chunk *compressed;                                                \
   struct rle_data out;                                                         \
   out.number_of_chunks = CEIL_DEV(TEST_DATA_LEN, 1024);                        \
-  out.chunks = (struct rle_chunk *)malloc(sizeof(struct rle_chunk) *           \
-                                          out.number_of_chunks);               \
+  out.chunks = make_host_rle_chunks(out.number_of_chunks, BLOCK_SIZE);         \
   EXPECT_NE(out.chunks, nullptr);                                              \
-  CUDA_ERROR_CHECK(cudaMalloc(&compressed, sizeof(struct rle_chunk) *          \
-                                               out.number_of_chunks));         \
+  struct rle_chunks *compressed =                                              \
+      make_device_rle_chunks(out.number_of_chunks, BLOCK_SIZE);                \
+  compressed = make_device_rle_chunks(out.number_of_chunks, BLOCK_SIZE);       \
   rle_compression_kernel<<<out.number_of_chunks, 1024>>>(                      \
       dev_data, TEST_DATA_LEN, compressed);                                    \
   CUDA_ERROR_CHECK(cudaDeviceSynchronize());                                   \
   CUDA_ERROR_CHECK(cudaFree(dev_data));                                        \
-  CUDA_ERROR_CHECK(cudaMemcpy(out.chunks, compressed,                          \
-                              sizeof(struct rle_chunk) * out.number_of_chunks, \
-                              cudaMemcpyDeviceToHost));                        \
+  copy_rle_chunks(compressed, out.chunks, DeviceToHost, out.number_of_chunks,  \
+                  out.number_of_chunks *BLOCK_SIZE);                           \
   CUDA_ERROR_CHECK(cudaFree(compressed));                                      \
   unsigned char decomp_data[TEST_DATA_LEN];                                    \
   int counter = 0;                                                             \
-  EXPECT_GT(out.chunks[0].array_length, 0);                                    \
+  EXPECT_GT(out.chunks->chunk_lengths[0], 0);                                  \
   /* EXPECT_GT(out.chunks[1].array_length, 0); */                              \
   /* EXPECT_GE((int)out.chunks[0].lengths[0], 0); */                           \
   /* EXPECT_GE((int)out.chunks[1].lengths[0], 0); */                           \
   for (int chunk = 0; chunk < out.number_of_chunks; chunk++) {                 \
-    EXPECT_LE(out.chunks[chunk].array_length, 1024);                           \
-    EXPECT_GT(out.chunks[chunk].array_length, 0);                              \
-    for (int i = 0; i < out.chunks[chunk].array_length; i++) {                 \
-      EXPECT_LT(out.chunks[chunk].values[i], 256);                             \
-      EXPECT_GE(out.chunks[chunk].values[i], 0);                               \
-      EXPECT_GE(out.chunks[chunk].lengths[i], 0);                              \
-      EXPECT_LT(out.chunks[chunk].lengths[i], 256);                            \
-      for (int j = 0; j <= out.chunks[chunk].lengths[i]; j++) {                \
-        decomp_data[counter] = out.chunks[chunk].values[i];                    \
+    EXPECT_LE(out.chunks->chunk_lengths[chunk], 1024);                         \
+    EXPECT_GT(out.chunks->chunk_lengths[chunk], 0);                            \
+    for (int i = 0; i < out.chunks->chunk_lengths[chunk]; i++) {               \
+      EXPECT_LT(out.chunks->values[out.chunks->chunk_starts[chunk] + i], 256); \
+      EXPECT_GE(out.chunks->values[out.chunks->chunk_starts[chunk] + i], 0);   \
+      EXPECT_GE(out.chunks->repetitions[out.chunks->chunk_starts[chunk] + i],  \
+                0);                                                            \
+      EXPECT_LT(out.chunks->repetitions[out.chunks->chunk_starts[chunk] + i],  \
+                256);                                                          \
+      for (int j = 0;                                                          \
+           j <= out.chunks->repetitions[out.chunks->chunk_starts[chunk] + i];  \
+           j++) {                                                              \
+        decomp_data[counter] =                                                 \
+            out.chunks->values[out.chunks->chunk_starts[chunk] + i];           \
         counter++;                                                             \
         EXPECT_LE(counter, TEST_DATA_LEN);                                     \
       }                                                                        \
@@ -194,20 +198,22 @@ TEST(run_length_encoding, host_compress_rle) {
   // EXPECT_NE(rle, nullptr);
   unsigned char *decomp_data = (unsigned char *)malloc(TEST_DATA_LEN);
   int counter = 0;
-  EXPECT_GT(rle->chunks[0].array_length, 0);
-  /* EXPECT_GT(rle->chunks[1].array_length, 0); */
-  /* EXPECT_GE((int)rle->chunks[0].lengths[0], 0); */
-  /* EXPECT_GE((int)rle->chunks[1].lengths[0], 0); */
+  EXPECT_GT(rle->chunks->chunk_lengths[0], 0);
   for (int chunk = 0; chunk < rle->number_of_chunks; chunk++) {
-    EXPECT_LE(rle->chunks[chunk].array_length, 1024);
-    EXPECT_GT(rle->chunks[chunk].array_length, 0);
-    for (int i = 0; i < rle->chunks[chunk].array_length; i++) {
-      EXPECT_LT(rle->chunks[chunk].values[i], 256);
-      EXPECT_GE(rle->chunks[chunk].values[i], 0);
-      EXPECT_GE(rle->chunks[chunk].lengths[i], 0);
-      EXPECT_LT(rle->chunks[chunk].lengths[i], 256);
-      for (int j = 0; j <= rle->chunks[chunk].lengths[i]; j++) {
-        decomp_data[counter] = rle->chunks[chunk].values[i];
+    EXPECT_LE(rle->chunks->chunk_lengths[chunk], 1024);
+    EXPECT_GT(rle->chunks->chunk_lengths[chunk], 0);
+    for (int i = 0; i < rle->chunks->chunk_lengths[chunk]; i++) {
+      EXPECT_LT(rle->chunks->values[rle->chunks->chunk_starts[chunk] + i], 256);
+      EXPECT_GE(rle->chunks->values[rle->chunks->chunk_starts[chunk] + i], 0);
+      EXPECT_GE(rle->chunks->repetitions[rle->chunks->chunk_starts[chunk] + i],
+                0);
+      EXPECT_LT(rle->chunks->repetitions[rle->chunks->chunk_starts[chunk] + i],
+                256);
+      for (int j = 0;
+           j <= rle->chunks->repetitions[rle->chunks->chunk_starts[chunk] + i];
+           j++) {
+        decomp_data[counter] =
+            rle->chunks->values[rle->chunks->chunk_starts[chunk] + i];
         counter++;
         EXPECT_LE(counter, TEST_DATA_LEN);
       }
@@ -224,4 +230,27 @@ TEST(run_length_encoding, host_compress_rle) {
   free(decomp_data);
   free(rle->chunks);
   free(rle);
+}
+
+TEST(rle_utils, make_device_rle_chunk) {
+  int number_og_chunks = 100;
+  int chunk_cap = BLOCK_SIZE;
+  struct rle_chunks *dev_chunks =
+      make_device_rle_chunks(number_og_chunks, chunk_cap);
+  CUDA_ERROR_CHECK(cudaFree(dev_chunks));
+}
+
+TEST(rle_utils, make_host_rle_chunk) {
+  int number_og_chunks = 100;
+  int chunk_cap = BLOCK_SIZE;
+  struct rle_chunks *host_chunks =
+      make_host_rle_chunks(number_og_chunks, chunk_cap);
+  for (int i = 0; i < number_og_chunks; i++) {
+    int dummy = host_chunks->chunk_lengths[i];
+    for (int j = 0; j < host_chunks->chunk_lengths[i]; j++) {
+      dummy = host_chunks->repetitions[i * BLOCK_SIZE + j];
+      dummy = host_chunks->values[i * BLOCK_SIZE + j];
+    }
+  }
+  free(host_chunks);
 }

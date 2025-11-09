@@ -58,7 +58,7 @@ run: build
 
 CPPFLAGS=$(shell pkg-config gtest_main --cflags --libs) -I tests/include
 LDLIBS+=$(shell pkg-config gtest_main --libs --cflags) -ljpeg -lgtest_main
-tests/build/%.o:NVCCFLAGS+=-I src
+# tests/build/%.o:NVCCFLAGS+=-I src
 tests/build/%.o:: tests/src/%.cu
 	mkdir -p tests/build
 	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) -dc $< -o $@

@@ -1,3 +1,4 @@
+#include "cuda_utils.cuh"
 #include "rle.h"
 #include <cuda.h>
 #include <device_launch_parameters.h>
