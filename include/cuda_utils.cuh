@@ -8,6 +8,8 @@ __device__ int warp_cumsum(int val, unsigned int mask);
 
 __device__ int block_cumsum(int val);
 
+#define CEIL_DEV(num, div) (((num) / (div)) + ((num) % (div) != 0))
+
 #define CUDA_ERROR_CHECK(expr)                                                 \
   do {                                                                         \
     cudaError_t cudaStatus = expr;                                             \
