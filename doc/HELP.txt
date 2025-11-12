@@ -1,0 +1,12 @@
+fixed and run length encoding
+
+usage:
+    frle [OPTIONS] [FILE]
+
+options:
+    -r, --rle               use run length encoding
+    -f, --fle               use fixed length encoding
+    -c, --compress          compress FILE
+    -d, --decompress        decompress FILE
+    -o, --output_name       set the file name for the outputted file
+    -h, --help              print help information

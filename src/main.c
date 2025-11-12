@@ -1,10 +1,13 @@
+#include "cli.h"
 #include "load_images.h"
 #include "rle.h"
 #include <stdio.h>
 #include <stdlib.h>
 
 int main(int argc, char *argv[]) {
-
+  // show_help();
+  enum args_options *options;
+  parse_args(argc, argv, options);
   // imgRawImage_t *img = loadJpegImageFile("sample-images/docs/image-1.jpg");
   // // imgRawImage_t *img = loadJpegImageFile("graphic.jpeg");
   // struct rle_data *compressed =

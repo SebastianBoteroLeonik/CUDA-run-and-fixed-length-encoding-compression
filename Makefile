@@ -25,7 +25,7 @@ CUDADEP=$(patsubst src/%.cu,dependencies/%.du,$(CUDAFILES))
 TESTS=$(wildcard tests/src/*)
 TESTOBJ=$(patsubst tests/src/%.cu,tests/build/%.o,$(patsubst tests/src/%.cpp,tests/build/%.o,$(TESTS)))
 
-EXECNAME=bin/prog
+EXECNAME=bin/frle
 
 all: $(CDEP) $(CUDADEP) build
 
@@ -51,7 +51,7 @@ include $(CDEP) $(CUDADEP)
 
 build: $(OBJ)
 	mkdir -p bin
-	 $(NVCC) $(OBJ) -o $(EXECNAME) $(LDLIBS)
+	 $(NVCC) $(OBJ) -o $(EXECNAME) $(LDLIBS) $(NVCCFLAGS)
 
 run: build
 	./$(EXECNAME)
