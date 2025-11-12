@@ -1,5 +1,6 @@
 #include "cli.h"
 #include <getopt.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -21,7 +22,12 @@ void show_help() {
   fclose(help_file);
 }
 
-void parse_args(int argc, char **argv, args_options_t *options) {
+void parse_args(int argc, char **argv, args_options_t *options,
+                char **output_file_name, char **input_file_name) {
+  *options = 0;
+  bool has_chosen_compression_direction = false;
+  bool has_chosen_compression_format = false;
+  bool has_set_output_file_name = false;
   while (1) {
     // int this_option_optind = optind ? optind : 1;
     static struct option long_options[] = {
@@ -39,43 +45,82 @@ void parse_args(int argc, char **argv, args_options_t *options) {
       break;
     switch (c) {
     case 'r':
-      printf("option r [TODO]\n");
+      if (has_chosen_compression_format && (*options & USE_FLE)) {
+        fprintf(stderr, "Only one compression format can be used at a time. "
+                        "Two were given\n");
+        exit(EXIT_FAILURE);
+      }
+      has_chosen_compression_format = true;
+      // TODO
+      printf("option r\n");
       break;
 
     case 'f':
-      printf("option f [TODO]\n");
+      if (has_chosen_compression_format && !(*options & USE_FLE)) {
+        fprintf(stderr, "Only one compression format can be used at a time. "
+                        "Two were given\n");
+        exit(EXIT_FAILURE);
+      }
+      *options |= USE_FLE;
+      has_chosen_compression_format = true;
+      // TODO
+      printf("option f\n");
       break;
 
     case 'c':
-      printf("option c [TODO]\n");
+      if (has_chosen_compression_direction && (*options & DECOMPRESS)) {
+        fprintf(stderr, "Cannot both compress and decompress at once. Please "
+                        "choose one option");
+        exit(EXIT_FAILURE);
+      }
+      has_chosen_compression_direction = true;
+      // TODO
+      printf("option c\n");
       break;
 
     case 'd':
-      printf("option d [TODO]\n");
+      if (has_chosen_compression_direction && !(*options & DECOMPRESS)) {
+        fprintf(stderr, "Cannot both compress and decompress at once. Please "
+                        "choose one option");
+        exit(EXIT_FAILURE);
+      }
+      *options |= DECOMPRESS;
+      has_chosen_compression_direction = true;
+      // TODO
+      printf("option d\n");
       break;
 
     case 'h':
-      // printf("option h [TODO]\n");
       show_help();
       exit(EXIT_SUCCESS);
       break;
 
+      // TODO
     case 'o':
-      printf("option o with value '%s' [TODO]\n", optarg);
+      has_set_output_file_name = true;
+      // printf("option o with value '%s' [TODO]\n", optarg);
+      *output_file_name = optarg;
       break;
 
     case ':':
-      printf("Missing argument [TODO]\n");
+      // fprintf(stderr, "Missing option ");
+      // if (optopt) {
+      //   fprintf(stderr, "-%c\n", optopt);
+      // } else {
+      //   fprintf(stderr, "%s\n", argv[optind - 1]);
+      // }
+      fprintf(stderr, "Missing file name after [-o|--output_name]\n");
+      exit(EXIT_FAILURE);
       break;
 
     case '?':
-      printf("\n");
+      fprintf(stderr, "\nUNKNOWN OPTION: ");
       if (optopt) {
-        printf("UNKNOWN OPTION: -%c\n", optopt);
+        fprintf(stderr, "-%c\n", optopt);
       } else {
-        printf("UNKNOWN OPTION: %s\n", argv[optind - 1]);
+        fprintf(stderr, "%s\n", argv[optind - 1]);
       }
-      printf("\n");
+      fprintf(stderr, "\n");
       show_help();
       exit(EXIT_FAILURE);
       break;
@@ -87,10 +132,24 @@ void parse_args(int argc, char **argv, args_options_t *options) {
     }
   }
 
-  if (optind < argc) {
-    printf("non-option ARGV-elements: ");
-    while (optind < argc)
-      printf("%s ", argv[optind++]);
-    printf("\n");
+  if (!has_chosen_compression_format) {
+    fprintf(stderr, "No compression format has been specified. Please use the "
+                    "necessary options to specify whether run or fixed length "
+                    "encoding should be used\n");
+    show_help();
+    exit(EXIT_FAILURE);
   }
+  if (!has_chosen_compression_direction) {
+    fprintf(stderr, "Please specify whether to compress or decompress the "
+                    "file. Use the necessary options\n");
+    show_help();
+    exit(EXIT_FAILURE);
+  }
+
+  if (optind + 1 != argc) {
+    fprintf(stderr, "Incorrect number of arguments\n");
+    show_help();
+    exit(EXIT_FAILURE);
+  }
+  *input_file_name = argv[optind];
 }

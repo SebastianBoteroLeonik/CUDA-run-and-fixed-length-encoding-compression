@@ -6,8 +6,24 @@
 
 int main(int argc, char *argv[]) {
   // show_help();
-  enum args_options *options;
-  parse_args(argc, argv, options);
+  enum args_options options;
+  char *output_file_name = NULL;
+  char *input_file_name = NULL;
+  parse_args(argc, argv, &options, &output_file_name, &input_file_name);
+  if (output_file_name) {
+    printf("output file name: %s\n", output_file_name);
+  }
+  printf("input file name: %s\n", input_file_name);
+  if (options & USE_FLE) {
+    printf("using fle\n");
+  } else {
+    printf("using rle\n");
+  }
+  if (options & DECOMPRESS) {
+    printf("decompressing\n");
+  } else {
+    printf("compressing\n");
+  }
   // imgRawImage_t *img = loadJpegImageFile("sample-images/docs/image-1.jpg");
   // // imgRawImage_t *img = loadJpegImageFile("graphic.jpeg");
   // struct rle_data *compressed =
