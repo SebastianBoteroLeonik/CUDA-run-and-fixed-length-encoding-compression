@@ -68,17 +68,25 @@ __host__ void copy_rle_chunks(struct rle_chunks *src, struct rle_chunks *dst,
   default:
     exit(EXIT_FAILURE);
   }
-  if (cudakind == cudaMemcpyDeviceToHost) {
+  if (cudakind == cudaMemcpyDeviceToHost ||
+      cudakind == cudaMemcpyDeviceToDevice) {
     struct rle_chunks dummy;
     CUDA_ERROR_CHECK(
         cudaMemcpy(&dummy, src, sizeof(dummy), cudaMemcpyDeviceToHost));
     src = &dummy;
   }
+  if (cudakind == cudaMemcpyHostToDevice ||
+      cudakind == cudaMemcpyDeviceToDevice) {
+    struct rle_chunks dummy;
+    CUDA_ERROR_CHECK(
+        cudaMemcpy(&dummy, dst, sizeof(dummy), cudaMemcpyDeviceToHost));
+    dst = &dummy;
+  }
   CUDA_ERROR_CHECK(cudaMemcpy(dst->chunk_starts, src->chunk_starts,
-                              sizeof(dst->chunk_starts[0]) * number_of_chunks,
+                              sizeof(*src->chunk_starts) * number_of_chunks,
                               cudakind));
   CUDA_ERROR_CHECK(cudaMemcpy(dst->chunk_lengths, src->chunk_lengths,
-                              sizeof(dst->chunk_lengths[0]) * number_of_chunks,
+                              sizeof(*src->chunk_lengths) * number_of_chunks,
                               cudakind));
   CUDA_ERROR_CHECK(cudaMemcpy(dst->repetitions, src->repetitions,
                               total_array_length, cudakind));

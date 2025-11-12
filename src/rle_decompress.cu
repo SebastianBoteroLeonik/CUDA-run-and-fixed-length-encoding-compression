@@ -10,7 +10,7 @@ __global__ void uchar_array_to_ullong_array(unsigned char *chars,
   if (global_thread_id >= array_length) {
     return;
   }
-  llongs[global_thread_id] = chars[global_thread_id];
+  llongs[global_thread_id] = chars[global_thread_id] + 1;
 }
 
 __global__ void run_cumsum(unsigned long long *array,
@@ -56,7 +56,7 @@ __host__ void recursive_cumsum(unsigned long long *array,
   CUDA_ERROR_CHECK(cudaFree(next_array));
 }
 
-__host__ void cumsum_repetitions(unsigned long long *result,
+__host__ void cumsum_repetitions(unsigned long long **result,
                                  struct rle_chunks *chunks,
                                  unsigned long long compressed_array_length) {
   unsigned long long *repetition_cumsums;
@@ -65,13 +65,18 @@ __host__ void cumsum_repetitions(unsigned long long *result,
                  sizeof(*repetition_cumsums) * compressed_array_length));
   unsigned long number_of_blocks =
       CEIL_DEV(compressed_array_length, BLOCK_SIZE);
+  struct rle_chunks host_chunks;
+  CUDA_ERROR_CHECK(cudaMemcpy(&host_chunks, chunks, sizeof(host_chunks),
+                              cudaMemcpyDeviceToHost));
   uchar_array_to_ullong_array<<<number_of_blocks, BLOCK_SIZE>>>(
-      chunks->repetitions, repetition_cumsums, compressed_array_length);
+      host_chunks.repetitions, repetition_cumsums, compressed_array_length);
   recursive_cumsum(repetition_cumsums, compressed_array_length);
+  *result = repetition_cumsums;
 }
 
 __global__ void
 decompress_rle_kernel(char *uncompressed_data, struct rle_chunks *chunks,
+                      unsigned long long *repetitions_cumsums,
                       unsigned long long compressed_array_length) {
 
   const long long global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
@@ -82,6 +87,15 @@ decompress_rle_kernel(char *uncompressed_data, struct rle_chunks *chunks,
   //     (data_len % blockDim.x) * ((blockIdx.x + 1) * blockDim.x > data_len);
   if (global_thread_id >= compressed_array_length) {
     return;
+  }
+  unsigned long long offset;
+  if (global_thread_id == 0) {
+    offset = 0;
+  } else {
+    offset = repetitions_cumsums[global_thread_id - 1];
+  }
+  for (int i = 0; i <= chunks->repetitions[global_thread_id]; i++) {
+    uncompressed_data[offset + i] = chunks->values[global_thread_id];
   }
 }
 
@@ -96,8 +110,14 @@ __host__ char *decompress_rle(struct rle_data *compressed_data) {
   copy_rle_chunks(compressed_data->chunks, dev_chunks, HostToDevice,
                   compressed_data->number_of_chunks,
                   compressed_data->compressed_array_length);
-  decompress_rle_kernel<<<1, 1024>>>(dev_uncompressed_data, dev_chunks,
-                                     compressed_data->compressed_array_length);
+  unsigned long long *repetitions_cumsums;
+  cumsum_repetitions(&repetitions_cumsums, dev_chunks,
+                     compressed_data->compressed_array_length);
+
+  decompress_rle_kernel<<<
+      CEIL_DEV(compressed_data->compressed_array_length, BLOCK_SIZE), 1024>>>(
+      dev_uncompressed_data, dev_chunks, repetitions_cumsums,
+      compressed_data->compressed_array_length);
   CUDA_ERROR_CHECK(cudaDeviceSynchronize());
   CUDA_ERROR_CHECK(cudaFree(dev_chunks));
   CUDA_ERROR_CHECK(cudaMemcpy(uncompressed_data, dev_uncompressed_data,

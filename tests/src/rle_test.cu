@@ -293,7 +293,7 @@ TEST(rle_decoding, char_to_llong) {
   CUDA_ERROR_CHECK(cudaFree(dev_chars));
   CUDA_ERROR_CHECK(cudaFree(dev_longs));
   for (int i = 0; i < SIZE; i++) {
-    EXPECT_EQ(longs[i], chars[i]);
+    EXPECT_EQ(longs[i], chars[i] + 1);
   }
   free(chars);
   free(longs);
@@ -389,4 +389,45 @@ TEST(rle_decoding, rec_cumsum) {
     EXPECT_EQ(longs[i], i + 1);
   }
   free(longs);
+}
+
+// __global__ void print_dev_rle(struct rle_chunks *chunks, unsigned int len) {
+//   printf("chunks->chunk_starts[0] = %lu\n", chunks->chunk_starts[0]);
+//   printf("chunks->chunk_lengths[0] = %d\n", chunks->chunk_lengths[0]);
+//   for (int i = 0; i < len; i++) {
+//     printf("rep[%d] = %d\n", i, chunks->repetitions[i]);
+//     printf("val[%d] = %d\n", i, chunks->values[i]);
+//   }
+// }
+// __host__ void run_pdr(struct rle_chunks *chunks, unsigned int len) {
+//   print_dev_rle<<<1, 1>>>(chunks, len);
+//   cudaDeviceSynchronize();
+// }
+
+TEST(rle_decoding, decode) {
+  struct rle_data data;
+  data.compressed_array_length = 2000 * 1024;
+  data.number_of_chunks = 1;
+  data.chunks = make_host_rle_chunks(1, data.compressed_array_length);
+  data.chunks->chunk_starts[0] = 0;
+  data.chunks->chunk_lengths[0] = data.compressed_array_length;
+  data.total_data_length = 0;
+  for (int i = 0; i < data.compressed_array_length; i++) {
+    data.chunks->repetitions[i] = i % 5;
+    data.chunks->values[i] = i % 17;
+    data.total_data_length += 1 + (i % 5);
+  }
+  char *decomp = decompress_rle(&data);
+  int counter = 0;
+  for (int i = 0; i < data.compressed_array_length; i++) {
+    for (int j = 0; j <= i % 5; j++) {
+      // printf("i = %d, j = %d, counter = %d, decomp[counter] = %d\n", i, j,
+      //        counter, decomp[counter]);
+      EXPECT_EQ(decomp[counter], i % 17);
+      counter++;
+    }
+    // printf("i = %d\n", i);
+  }
+  fflush(stdout);
+  EXPECT_EQ(counter, data.total_data_length);
 }

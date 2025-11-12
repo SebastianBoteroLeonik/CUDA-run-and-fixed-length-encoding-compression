@@ -34,6 +34,7 @@ void copy_rle_chunks(struct rle_chunks *src, struct rle_chunks *dst,
                      enum cpyKind kind, size_t number_of_chunks,
                      ssize_t total_array_length);
 
+char *decompress_rle(struct rle_data *compressed_data);
 #ifdef __cplusplus
 }
 #endif // __cplusplus

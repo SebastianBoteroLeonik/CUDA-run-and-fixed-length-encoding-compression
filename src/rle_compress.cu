@@ -134,8 +134,6 @@ __global__ void rle_compression_kernel(const unsigned char *data,
 //   }
 // }
 
-#define CEIL_DEV(num, div) (((num) / (div)) + ((num) % (div) != 0))
-
 __host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
   struct rle_data *out;
   out = (struct rle_data *)malloc(sizeof(struct rle_data));
