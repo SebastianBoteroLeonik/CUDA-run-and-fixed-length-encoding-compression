@@ -15,14 +15,17 @@ int main(int argc, char *argv[]) {
   }
   printf("input file name: %s\n", input_file_name);
   if (options & USE_FLE) {
-    printf("using fle\n");
+    if (options & DECOMPRESS) {
+      printf("decompressing fle\n");
+    } else {
+      printf("compressing fle\n");
+    }
   } else {
-    printf("using rle\n");
-  }
-  if (options & DECOMPRESS) {
-    printf("decompressing\n");
-  } else {
-    printf("compressing\n");
+    if (options & DECOMPRESS) {
+      printf("decompressing rle\n");
+    } else {
+      printf("compressing rle\n");
+    }
   }
   // imgRawImage_t *img = loadJpegImageFile("sample-images/docs/image-1.jpg");
   // // imgRawImage_t *img = loadJpegImageFile("graphic.jpeg");
