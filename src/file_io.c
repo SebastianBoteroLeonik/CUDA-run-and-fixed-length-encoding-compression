@@ -1,11 +1,40 @@
 #include "file_io.h"
 #include "rle.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #define ERR(source)                                                            \
   (fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), perror(source),             \
    exit(EXIT_FAILURE))
+
+void write_binary_file(char *file_name, unsigned char *data, size_t data_len) {
+  FILE *fileptr = fopen(file_name, "wb");
+  if (!fileptr) {
+    ERR("fopen");
+  }
+  if (fwrite(data, 1, data_len, fileptr) != data_len) {
+    ERR("fwrite");
+  }
+  fclose(fileptr);
+}
+
+unsigned char *read_binary_file(char *file_name, int *data_len) {
+  FILE *fileptr = fopen(file_name, "rb");
+  if (!fileptr) {
+    ERR("fopen");
+  }
+  fseek(fileptr, 0L, SEEK_END);
+  int file_size = ftell(fileptr);
+  rewind(fileptr);
+  char *data = malloc(file_size);
+  if (fread(data, 1, file_size, fileptr) != file_size) {
+    ERR("fread");
+  }
+  fclose(fileptr);
+  *data_len = file_size;
+  return data;
+}
 
 void write_rle_to_file(struct rle_data *data, char *file_name) {
   FILE *fileptr = fopen(file_name, "wb");

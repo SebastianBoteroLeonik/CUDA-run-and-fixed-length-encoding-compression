@@ -29,6 +29,27 @@ void test_file_equality(char *filename1, char *filename2) {
   fclose(f2);
 }
 
+TEST(file_io, write_binary) {
+  constexpr int size = 40;
+  unsigned char buf[size];
+  for (int i = 0; i < size; i++) {
+    buf[i] = i;
+  }
+  char file_name[50] = "test_outputs/write_binary";
+  write_binary_file(file_name, buf, size);
+  char reference_file_name[50] = "test_data/reference_binary";
+  test_file_equality(file_name, reference_file_name);
+}
+
+TEST(file_io, read_binary) {
+  char file_name[50] = "test_data/reference_binary";
+  int size;
+  unsigned char *data_read = read_binary_file(file_name, &size);
+  for (int i = 0; i < size; i++) {
+    EXPECT_EQ(data_read[i], i);
+  }
+}
+
 /*
 [ 1, 1, 1, 2, 2, 255, 255, 124 ]
 ||
