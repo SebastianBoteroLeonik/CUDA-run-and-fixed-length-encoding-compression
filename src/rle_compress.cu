@@ -142,6 +142,7 @@ __host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
     return NULL;
   }
   out->number_of_chunks = CEIL_DEV(data_len, BLOCK_SIZE);
+  out->total_data_length = data_len;
 
   CUDA_ERROR_CHECK(cudaSetDevice(0));
 

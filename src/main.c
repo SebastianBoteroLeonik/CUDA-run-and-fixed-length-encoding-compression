@@ -1,4 +1,5 @@
 #include "cli.h"
+#include "file_io.h"
 #include "load_images.h"
 #include "rle.h"
 #include <stdio.h>
@@ -24,7 +25,16 @@ int main(int argc, char *argv[]) {
     if (options & DECOMPRESS) {
       printf("decompressing rle\n");
     } else {
+      if (!output_file_name) {
+        output_file_name = "output.rle";
+      }
       printf("compressing rle\n");
+      int data_length;
+      unsigned char *binary_data =
+          read_binary_file(input_file_name, &data_length);
+      printf("data_length = %d\n", data_length);
+      struct rle_data *rle = compress_rle(binary_data, data_length);
+      write_rle_to_file(rle, output_file_name);
     }
   }
   // imgRawImage_t *img = loadJpegImageFile("sample-images/docs/image-1.jpg");
