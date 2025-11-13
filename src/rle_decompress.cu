@@ -99,12 +99,13 @@ decompress_rle_kernel(char *uncompressed_data, struct rle_chunks *chunks,
   }
 }
 
-__host__ char *decompress_rle(struct rle_data *compressed_data) {
+__host__ unsigned char *decompress_rle(struct rle_data *compressed_data) {
   char *dev_uncompressed_data;
   CUDA_ERROR_CHECK(
       cudaMalloc(&dev_uncompressed_data, compressed_data->total_data_length));
 
-  char *uncompressed_data = (char *)malloc(compressed_data->total_data_length);
+  unsigned char *uncompressed_data =
+      (unsigned char *)malloc(compressed_data->total_data_length);
   struct rle_chunks *dev_chunks =
       make_device_rle_chunks(1, compressed_data->compressed_array_length);
   copy_rle_chunks(compressed_data->chunks, dev_chunks, HostToDevice,

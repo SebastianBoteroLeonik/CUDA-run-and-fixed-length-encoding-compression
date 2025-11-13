@@ -417,7 +417,7 @@ TEST(rle_decoding, decode) {
     data.chunks->values[i] = i % 17;
     data.total_data_length += 1 + (i % 5);
   }
-  char *decomp = decompress_rle(&data);
+  unsigned char *decomp = decompress_rle(&data);
   int counter = 0;
   for (int i = 0; i < data.compressed_array_length; i++) {
     for (int j = 0; j <= i % 5; j++) {

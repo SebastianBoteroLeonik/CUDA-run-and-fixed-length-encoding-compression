@@ -18,12 +18,20 @@ int main(int argc, char *argv[]) {
   if (options & USE_FLE) {
     if (options & DECOMPRESS) {
       printf("decompressing fle\n");
+      printf("NOT IMPLEMENTED\n");
     } else {
       printf("compressing fle\n");
+      printf("NOT IMPLEMENTED\n");
     }
   } else {
     if (options & DECOMPRESS) {
+      if (!output_file_name) {
+        output_file_name = "output.decompressed";
+      }
       printf("decompressing rle\n");
+      struct rle_data *rle = read_rle_from_file(input_file_name);
+      unsigned char *binary_data = decompress_rle(rle);
+      write_binary_file(output_file_name, binary_data, rle->total_data_length);
     } else {
       if (!output_file_name) {
         output_file_name = "output.rle";
@@ -35,6 +43,7 @@ int main(int argc, char *argv[]) {
       printf("data_length = %d\n", data_length);
       struct rle_data *rle = compress_rle(binary_data, data_length);
       write_rle_to_file(rle, output_file_name);
+      printf("%d\n", rle->compressed_array_length);
     }
   }
   // imgRawImage_t *img = loadJpegImageFile("sample-images/docs/image-1.jpg");
