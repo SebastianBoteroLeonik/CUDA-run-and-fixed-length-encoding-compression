@@ -1,4 +1,5 @@
 #include "file_io.h"
+#include "fle.h"
 #include "rle.h"
 #include <stddef.h>
 #include <stdio.h>
@@ -110,4 +111,76 @@ struct rle_data *read_rle_from_file(char *file_name) {
     ERR("fclose");
   return data;
   return NULL;
+}
+
+void write_fle_to_file(struct fle_data *data, char *file_name) {
+  FILE *fileptr = fopen(file_name, "wb");
+  if (!fileptr) {
+    ERR("fopen");
+  }
+  int wc; // written count
+  wc = fwrite(&(data->total_data_length), sizeof(data->total_data_length), 1,
+              fileptr);
+  if (wc != 1)
+    ERR("fwrite total_data_length");
+  printf("data->total_data_length = %lu\n", data->total_data_length);
+  printf("data->total_data_length = %p\n", &data->total_data_length);
+
+  wc = fwrite(&(data->number_of_chunks), sizeof(data->number_of_chunks), 1,
+              fileptr);
+  if (wc != 1)
+    ERR("fwrite number_of_chunks");
+  printf("data->number_of_chunks = %lu\n", data->number_of_chunks);
+  printf("data->number_of_chunks = %p\n", &data->number_of_chunks);
+
+  wc = fwrite(data->chunk_element_size, sizeof(*data->chunk_element_size),
+              data->number_of_chunks, fileptr);
+  if (wc != data->number_of_chunks)
+    ERR("fwrite chunk_element_size");
+
+  for (int i = 0; i < data->number_of_chunks; i++) {
+    int full_len = BLOCK_SIZE;
+    if ((i + 1) * BLOCK_SIZE > data->total_data_length) {
+      full_len = data->total_data_length % BLOCK_SIZE;
+    }
+    int chunk_len = CEIL_DEV((data->chunk_element_size[i] * full_len), 8);
+    printf("chunk_len = %d\n", chunk_len);
+    wc = fwrite(data->chunk_data[i], sizeof(*data->chunk_data[i]), chunk_len,
+                fileptr);
+    if (wc != chunk_len)
+      ERR("fwrite chunk_data");
+  }
+  fclose(fileptr);
+}
+
+struct fle_data *read_fle_from_file(char *file_name) {
+  FILE *fileptr = fopen(file_name, "rb");
+  if (!fileptr) {
+    ERR("fopen");
+  }
+  int rc; // read count
+  unsigned long total_data_length;
+  rc = fread(&(total_data_length), sizeof(total_data_length), 1, fileptr);
+  if (rc != 1)
+    ERR("fread total_data_length");
+  unsigned long number_of_chunks;
+  rc = fread(&(number_of_chunks), sizeof(number_of_chunks), 1, fileptr);
+  if (rc != 1)
+    ERR("fread number_of_chunks");
+  struct fle_data *data = make_host_fle_data(number_of_chunks);
+  data->total_data_length = total_data_length;
+  rc = fread(data->chunk_element_size, sizeof(*data->chunk_element_size),
+             data->number_of_chunks, fileptr);
+  if (rc != data->number_of_chunks)
+    ERR("fwrite chunk_element_size");
+  for (int i = 0; i < data->number_of_chunks; i++) {
+    int chunk_len = CEIL_DEV((data->chunk_element_size[i] * BLOCK_SIZE), 8);
+    printf("chunk_len = %d\n", chunk_len);
+    rc = fread(data->chunk_data[i], sizeof(*data->chunk_data[i]), chunk_len,
+               fileptr);
+    if (rc != chunk_len)
+      ERR("fwrite chunk_data");
+  }
+  fclose(fileptr);
+  return data;
 }

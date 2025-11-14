@@ -105,13 +105,13 @@ TEST(fle_encoding, fle_compression) {
 }
 
 TEST(fle_encoding, fle_decompression) {
-  size_t number_of_chunks = 1;
+  size_t number_of_chunks = 10;
   struct fle_data *fle = make_host_fle_data(number_of_chunks);
   fle->number_of_chunks = number_of_chunks;
   fle->total_data_length = number_of_chunks * 512;
   for (int i = 0; i < number_of_chunks; i++) {
     fle->chunk_element_size[i] = 4;
-    for (int j = 0; j < 512; j += 2) {
+    for (int j = 0; j < 1024; j += 2) {
       char tmp = j % 16;
       tmp <<= 4;
       tmp |= (j + 1) % 16;

@@ -33,16 +33,6 @@ __global__ void fle_decompress_kernel(struct fle_data *fle,
   unsigned char mask = full_mask;
   mask <<= 8 - bits_necessary;
   mask >>= bit_index % 8;
-  if (fle->number_of_chunks != 1 || fle->total_data_length != 512) {
-    printf("fle: %p\n", fle);
-    __syncthreads();
-    printf("noc: %lu\n", fle->number_of_chunks);
-    printf("tdl: %lu\n", fle->total_data_length);
-    printf("ces: %p\n", fle->chunk_element_size);
-    printf("cd: %p\n", fle->chunk_data);
-    return;
-  }
-  __syncthreads();
   unsigned char masked = mask & (fle->chunk_data[block_id][bit_index / 8]);
   masked <<= bit_index % 8;
   masked >>= 8 - bits_necessary;

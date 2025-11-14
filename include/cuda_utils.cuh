@@ -1,6 +1,5 @@
 #ifndef RLE_UTILS
 #define RLE_UTILS
-#include <stdio.h>
 #define BLOCK_SIZE 1024
 #define WARP_SIZE 32
 

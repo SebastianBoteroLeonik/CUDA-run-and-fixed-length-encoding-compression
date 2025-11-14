@@ -1,3 +1,4 @@
+#include "fle.h"
 #include "rle.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
@@ -77,12 +78,12 @@ TEST(file_io, write_rle) {
   chunks->values[chunks->chunk_starts[1] + 1] = 124;
   data.chunks = chunks;
   write_rle_to_file(&data, file_name);
-  char true_file[40] = "test_data/example_file.rle";
+  char true_file[40] = "test_data/reference_file.rle";
   test_file_equality(file_name, true_file);
 }
 
 TEST(file_io, read_rle) {
-  char file_name[40] = "test_data/example_file.rle";
+  char file_name[40] = "test_data/reference_file.rle";
   struct rle_data *data = read_rle_from_file(file_name);
   EXPECT_EQ(data->total_data_length, 8);
   EXPECT_EQ(data->compressed_array_length, 4);
@@ -97,4 +98,48 @@ TEST(file_io, read_rle) {
   EXPECT_EQ(data->chunks->values[1], 2);
   EXPECT_EQ(data->chunks->values[2], 255);
   EXPECT_EQ(data->chunks->values[3], 124);
+}
+
+TEST(file_io, write_fle) {
+  size_t number_of_chunks = 2;
+  struct fle_data *fle = make_host_fle_data(number_of_chunks);
+  fle->number_of_chunks = number_of_chunks;
+  fle->total_data_length = number_of_chunks * 256;
+  for (int i = 0; i < number_of_chunks; i++) {
+    fle->chunk_element_size[i] = 2;
+    for (int j = 0; j < 1024; j += 4) {
+      char tmp = j & 0b11;
+      tmp <<= 2;
+      tmp |= (j + 1) & 0b11;
+      tmp <<= 2;
+      tmp |= (j + 2) & 0b11;
+      tmp <<= 2;
+      tmp |= (j + 3) & 0b11;
+      fle->chunk_data[i][j / 4] = tmp;
+    }
+  }
+  char file_name[40] = "test_outputs/write_file.fle";
+  write_fle_to_file(fle, file_name);
+  char reference_file_name[40] = "test_data/reference_file.fle";
+  test_file_equality(file_name, reference_file_name);
+}
+
+TEST(file_io, read_fle) {
+  char file_name[40] = "test_data/reference_file.fle";
+  struct fle_data *fle = read_fle_from_file(file_name);
+  EXPECT_EQ(fle->number_of_chunks, 2);
+  EXPECT_EQ(fle->total_data_length, 512);
+  for (int i = 0; i < fle->number_of_chunks; i++) {
+    EXPECT_EQ(fle->chunk_element_size[i], 2);
+    for (int j = 0; j < 516; j += 4) {
+      char tmp = j & 0b11;
+      tmp <<= 2;
+      tmp |= (j + 1) & 0b11;
+      tmp <<= 2;
+      tmp |= (j + 2) & 0b11;
+      tmp <<= 2;
+      tmp |= (j + 3) & 0b11;
+      EXPECT_EQ(fle->chunk_data[i][j / 4], tmp);
+    }
+  }
 }

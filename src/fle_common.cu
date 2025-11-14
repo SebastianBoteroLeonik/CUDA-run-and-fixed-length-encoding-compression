@@ -41,7 +41,7 @@ __host__ struct fle_data *make_host_fle_data(size_t number_of_chunks) {
   fle->chunk_element_size = arena;
   arena += sizeof(*fle->chunk_element_size) * number_of_chunks;
 
-  fle->chunk_data = (unsigned char (*)[1024])arena;
+  fle->chunk_data = (unsigned char(*)[1024])arena;
 
   return fle;
 }
