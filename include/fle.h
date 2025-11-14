@@ -18,6 +18,8 @@ struct fle_data {
 struct fle_data *fle_compress(unsigned char *binary_data,
                               unsigned long data_length);
 
+unsigned char *fle_decompress(struct fle_data *compressed);
+
 struct fle_data *make_device_fle_data(size_t number_of_chunks);
 
 struct fle_data *make_host_fle_data(size_t number_of_chunks);

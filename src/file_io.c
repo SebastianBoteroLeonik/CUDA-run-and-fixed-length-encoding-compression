@@ -27,7 +27,7 @@ unsigned char *read_binary_file(char *file_name, int *data_len) {
   fseek(fileptr, 0L, SEEK_END);
   int file_size = ftell(fileptr);
   rewind(fileptr);
-  char *data = malloc(file_size);
+  unsigned char *data = malloc(file_size);
   if (fread(data, 1, file_size, fileptr) != file_size) {
     ERR("fread");
   }

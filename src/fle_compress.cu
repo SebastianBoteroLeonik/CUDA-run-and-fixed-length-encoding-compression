@@ -21,7 +21,9 @@ __global__ void fle_compress_kernel(struct fle_data *fle,
   }
   this_byte <<= (8 - bits_necessary);
   int bit_index = bits_necessary * id;
-  bool does_overflow = ((bit_index / 8) != ((bit_index + bits_necessary) / 8));
+  // bool does_overflow = ((bit_index / 8) != ((bit_index + bits_necessary) /
+  // 8));
+  bool does_overflow = (bit_index % 8 + bits_necessary > 8);
   // clear array
   fle->chunk_data[block_id][id] = 0;
   __syncthreads();
