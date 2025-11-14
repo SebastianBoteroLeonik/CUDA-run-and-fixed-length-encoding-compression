@@ -1,5 +1,6 @@
 #include "cli.h"
 #include "file_io.h"
+#include "fle.h"
 #include "load_images.h"
 #include "rle.h"
 #include <stdio.h>
@@ -17,16 +18,29 @@ int main(int argc, char *argv[]) {
   printf("input file name: %s\n", input_file_name);
   if (options & USE_FLE) {
     if (options & DECOMPRESS) {
+      if (!output_file_name) {
+        output_file_name = "fle.decompressed";
+      }
       printf("decompressing fle\n");
-      printf("NOT IMPLEMENTED\n");
+      struct fle_data *fle = read_fle_from_file(input_file_name);
+      unsigned char *binary_data = fle_decompress(fle);
+      write_binary_file(output_file_name, binary_data, fle->total_data_length);
     } else {
+      if (!output_file_name) {
+        output_file_name = "output.fle";
+      }
       printf("compressing fle\n");
-      printf("NOT IMPLEMENTED\n");
+      int data_length;
+      unsigned char *binary_data =
+          read_binary_file(input_file_name, &data_length);
+      printf("data_length = %d\n", data_length);
+      struct fle_data *fle = fle_compress(binary_data, data_length);
+      write_fle_to_file(fle, output_file_name);
     }
   } else {
     if (options & DECOMPRESS) {
       if (!output_file_name) {
-        output_file_name = "output.decompressed";
+        output_file_name = "rle.decompressed";
       }
       printf("decompressing rle\n");
       struct rle_data *rle = read_rle_from_file(input_file_name);
