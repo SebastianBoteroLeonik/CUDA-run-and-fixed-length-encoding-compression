@@ -242,11 +242,11 @@ TEST(rle_utils, make_device_rle_chunk) {
 }
 
 TEST(rle_utils, make_host_rle_chunk) {
-  int number_og_chunks = 100;
+  int number_of_chunks = 100;
   int chunk_cap = BLOCK_SIZE;
   struct rle_chunks *host_chunks =
-      make_host_rle_chunks(number_og_chunks, chunk_cap);
-  for (int i = 0; i < number_og_chunks; i++) {
+      make_host_rle_chunks(number_of_chunks, chunk_cap);
+  for (int i = 0; i < number_of_chunks; i++) {
     int dummy = host_chunks->chunk_lengths[i];
     for (int j = 0; j < host_chunks->chunk_lengths[i]; j++) {
       dummy = host_chunks->repetitions[i * BLOCK_SIZE + j];

@@ -20,7 +20,10 @@ struct rle_data {
 extern "C" {
 #endif // __cplusplus
 
+#ifndef CPYKIND
+#define CPYKIND
 enum cpyKind { HostToDevice, HostToHost, DeviceToHost };
+#endif // !CPYKIND
 
 struct rle_data *compress_rle(unsigned char *data, size_t data_len);
 

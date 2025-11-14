@@ -1,6 +1,5 @@
 #include "cuda_utils.cuh"
 #include "rle.h"
-// #include "rle_tests.h"
 #include <cuda.h>
 #include <device_launch_parameters.h>
 #include <stdio.h>

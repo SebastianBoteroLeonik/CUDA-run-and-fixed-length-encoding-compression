@@ -1,6 +1,5 @@
 #include "cuda_utils.cuh"
 #include "rle.h"
-#include <cstddef>
 #include <stddef.h>
 
 __host__ struct rle_chunks *make_device_rle_chunks(size_t number_of_chunks,
