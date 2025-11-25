@@ -144,7 +144,7 @@ void write_fle_to_file(struct fle_data *data, char *file_name) {
       full_len = data->total_data_length % BLOCK_SIZE;
     }
     int chunk_len = CEIL_DEV((data->chunk_element_size[i] * full_len), 8);
-    printf("chunk_len = %d\n", chunk_len);
+    // printf("chunk_len = %d\n", chunk_len);
     wc = fwrite(data->chunk_data[i], sizeof(*data->chunk_data[i]), chunk_len,
                 fileptr);
     if (wc != chunk_len)
