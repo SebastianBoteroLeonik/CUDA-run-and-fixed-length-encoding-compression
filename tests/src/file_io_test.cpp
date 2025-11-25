@@ -104,10 +104,10 @@ TEST(file_io, write_fle) {
   size_t number_of_chunks = 2;
   struct fle_data *fle = make_host_fle_data(number_of_chunks);
   fle->number_of_chunks = number_of_chunks;
-  fle->total_data_length = number_of_chunks * 256;
+  fle->total_data_length = number_of_chunks * BLOCK_SIZE - 10;
   for (int i = 0; i < number_of_chunks; i++) {
     fle->chunk_element_size[i] = 2;
-    for (int j = 0; j < 1024; j += 4) {
+    for (int j = 0; j < BLOCK_SIZE; j += 4) {
       char tmp = j & 0b11;
       tmp <<= 2;
       tmp |= (j + 1) & 0b11;
@@ -128,10 +128,13 @@ TEST(file_io, read_fle) {
   char file_name[40] = "test_data/reference_file.fle";
   struct fle_data *fle = read_fle_from_file(file_name);
   EXPECT_EQ(fle->number_of_chunks, 2);
-  EXPECT_EQ(fle->total_data_length, 512);
+  EXPECT_EQ(fle->total_data_length, fle->number_of_chunks * BLOCK_SIZE - 10);
   for (int i = 0; i < fle->number_of_chunks; i++) {
     EXPECT_EQ(fle->chunk_element_size[i], 2);
-    for (int j = 0; j < 516; j += 4) {
+    for (int j = 0; j < BLOCK_SIZE; j += 4) {
+      if (i * BLOCK_SIZE + j >= fle->total_data_length) {
+        break;
+      }
       char tmp = j & 0b11;
       tmp <<= 2;
       tmp |= (j + 1) & 0b11;
@@ -140,6 +143,9 @@ TEST(file_io, read_fle) {
       tmp <<= 2;
       tmp |= (j + 3) & 0b11;
       EXPECT_EQ(fle->chunk_data[i][j / 4], tmp);
+      if (fle->chunk_data[i][j / 4] != tmp) {
+        fprintf(stderr, "error for i = %d, j = %d\n", i, j);
+      }
     }
   }
 }

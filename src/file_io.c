@@ -172,14 +172,20 @@ struct fle_data *read_fle_from_file(char *file_name) {
   rc = fread(data->chunk_element_size, sizeof(*data->chunk_element_size),
              data->number_of_chunks, fileptr);
   if (rc != data->number_of_chunks)
-    ERR("fwrite chunk_element_size");
+    ERR("fread chunk_element_size");
   for (int i = 0; i < data->number_of_chunks; i++) {
-    int chunk_len = CEIL_DEV((data->chunk_element_size[i] * BLOCK_SIZE), 8);
-    printf("chunk_len = %d\n", chunk_len);
+    int full_len = BLOCK_SIZE;
+    if ((i + 1) * BLOCK_SIZE > data->total_data_length) {
+      full_len = data->total_data_length % BLOCK_SIZE;
+    }
+    int chunk_len = CEIL_DEV((data->chunk_element_size[i] * full_len), 8);
     rc = fread(data->chunk_data[i], sizeof(*data->chunk_data[i]), chunk_len,
                fileptr);
-    if (rc != chunk_len)
-      ERR("fwrite chunk_data");
+    if (rc != chunk_len) {
+      fprintf(stderr, "expected length %d; got %d; element size %d\n",
+              chunk_len, rc, data->chunk_element_size[i]);
+      ERR("fread chunk_data");
+    }
   }
   fclose(fileptr);
   return data;
