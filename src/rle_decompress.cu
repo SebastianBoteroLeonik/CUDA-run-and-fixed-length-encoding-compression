@@ -100,30 +100,39 @@ decompress_rle_kernel(char *uncompressed_data, struct rle_chunks *chunks,
 }
 
 __host__ unsigned char *decompress_rle(struct rle_data *compressed_data) {
+  INITIALIZE_CUDA_PERFORMANCE_CHECK(10)
   char *dev_uncompressed_data;
+  CUDA_PERFORMANCE_CHECKPOINT(before_binary_alloc)
   CUDA_ERROR_CHECK(
       cudaMalloc(&dev_uncompressed_data, compressed_data->total_data_length));
 
   unsigned char *uncompressed_data =
       (unsigned char *)malloc(compressed_data->total_data_length);
+  CUDA_PERFORMANCE_CHECKPOINT(before_rle_alloc)
   struct rle_chunks *dev_chunks =
       make_device_rle_chunks(1, compressed_data->compressed_array_length);
+  CUDA_PERFORMANCE_CHECKPOINT(before_rle_copy)
   copy_rle_chunks(compressed_data->chunks, dev_chunks, HostToDevice,
                   compressed_data->number_of_chunks,
                   compressed_data->compressed_array_length);
   unsigned long long *repetitions_cumsums;
+  CUDA_PERFORMANCE_CHECKPOINT(cumsum_repetitions)
   cumsum_repetitions(&repetitions_cumsums, dev_chunks,
                      compressed_data->compressed_array_length);
-
+  CUDA_PERFORMANCE_CHECKPOINT(decompression_kernel)
   decompress_rle_kernel<<<
       CEIL_DEV(compressed_data->compressed_array_length, BLOCK_SIZE), 1024>>>(
       dev_uncompressed_data, dev_chunks, repetitions_cumsums,
       compressed_data->compressed_array_length);
+  CUDA_PERFORMANCE_CHECKPOINT(after_kernel)
   CUDA_ERROR_CHECK(cudaDeviceSynchronize());
   CUDA_ERROR_CHECK(cudaFree(dev_chunks));
+  CUDA_PERFORMANCE_CHECKPOINT(before_binary_memcpy)
   CUDA_ERROR_CHECK(cudaMemcpy(uncompressed_data, dev_uncompressed_data,
                               compressed_data->total_data_length,
                               cudaMemcpyDeviceToHost));
+  CUDA_PERFORMANCE_CHECKPOINT(after_binary_memcpy)
   CUDA_ERROR_CHECK(cudaFree(dev_uncompressed_data));
+  PRINT_AND_TERMINATE_CUDA_PERFORMANCE_CHECK()
   return uncompressed_data;
 }

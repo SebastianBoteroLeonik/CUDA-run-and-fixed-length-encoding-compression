@@ -140,15 +140,19 @@ __host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
     perror("malloc rle_data");
     return NULL;
   }
+  INITIALIZE_CUDA_PERFORMANCE_CHECK(10)
   out->number_of_chunks = CEIL_DEV(data_len, BLOCK_SIZE);
   out->total_data_length = data_len;
 
   CUDA_ERROR_CHECK(cudaSetDevice(0));
 
   unsigned char *dev_data;
+  CUDA_PERFORMANCE_CHECKPOINT(binary_data_alloc)
   CUDA_ERROR_CHECK(cudaMalloc(&dev_data, sizeof(*data) * data_len));
+  CUDA_PERFORMANCE_CHECKPOINT(binary_data_memcpy)
   CUDA_ERROR_CHECK(cudaMemcpy(dev_data, data, sizeof(*data) * data_len,
                               cudaMemcpyHostToDevice));
+  CUDA_PERFORMANCE_CHECKPOINT(rle_alloc)
   struct rle_chunks *dev_chunks =
       make_device_rle_chunks(out->number_of_chunks, BLOCK_SIZE);
   // unsigned char *dev_arena;
@@ -167,10 +171,13 @@ __host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
   //   CUDA_ERROR_CHECK(cudaMemcpy(&(dev_chunks[i].values), &ptr, sizeof(ptr),
   //                               cudaMemcpyHostToDevice));
   // }
+  CUDA_PERFORMANCE_CHECKPOINT(before_kernel)
   rle_compression_kernel<<<out->number_of_chunks, BLOCK_SIZE>>>(data, data_len,
                                                                 dev_chunks);
+  CUDA_PERFORMANCE_CHECKPOINT(after_kernel)
   CUDA_ERROR_CHECK(cudaDeviceSynchronize());
   CUDA_ERROR_CHECK(cudaFree(dev_data));
+  CUDA_PERFORMANCE_CHECKPOINT(after_kernel)
   out->chunks = make_host_rle_chunks(out->number_of_chunks, BLOCK_SIZE);
 
   // if (!out->chunks) {
@@ -194,9 +201,12 @@ __host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
   //                               out->chunks[i].chunk_lengths,
   //                               cudaMemcpyDeviceToHost));
   // }
+  CUDA_PERFORMANCE_CHECKPOINT(before_rle_copy)
   copy_rle_chunks(dev_chunks, out->chunks, DeviceToHost, out->number_of_chunks,
                   out->number_of_chunks * BLOCK_SIZE);
 
+  CUDA_PERFORMANCE_CHECKPOINT(after_rle_copy)
   CUDA_ERROR_CHECK(cudaFree(dev_chunks));
+  PRINT_AND_TERMINATE_CUDA_PERFORMANCE_CHECK()
   return out;
 }
