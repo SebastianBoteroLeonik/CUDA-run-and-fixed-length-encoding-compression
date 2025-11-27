@@ -1,7 +1,7 @@
 #include "cuda_utils.cuh"
-// #include "rle_tests.h"
 #include <cuda.h>
 #include <device_launch_parameters.h>
+#include <stdio.h>
 
 /* A function to be run warpwise.
  * It sums all of the values val beetween the threads
@@ -48,4 +48,46 @@ __device__ int block_cumsum(int val) {
     val += partial_sums[id / WARP_SIZE - 1];
   }
   return val;
+}
+
+__global__ void run_cumsum(unsigned int *array,
+                           unsigned int *last_sums_in_chunks,
+                           unsigned int array_length) {
+  const long long global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
+  if (global_thread_id >= array_length) {
+    return;
+  }
+  const unsigned int block_length =
+      blockDim.x * ((blockIdx.x + 1) * blockDim.x <= array_length) +
+      (array_length % blockDim.x) *
+          ((blockIdx.x + 1) * blockDim.x > array_length);
+  array[global_thread_id] = block_cumsum(array[global_thread_id]);
+  if (threadIdx.x == block_length - 1) {
+    last_sums_in_chunks[blockIdx.x] = array[global_thread_id];
+  }
+}
+
+__global__ void down_propagate_cumsum(unsigned int *array,
+                                      unsigned int *last_sums_in_chunks,
+                                      unsigned int array_length) {
+  const long long global_thread_id =
+      blockDim.x * (blockIdx.x + 1) + threadIdx.x;
+  if (global_thread_id >= array_length) {
+    return;
+  }
+  array[global_thread_id] += last_sums_in_chunks[blockIdx.x];
+}
+
+__host__ void recursive_cumsum(unsigned int *array, unsigned int array_len) {
+  if (array_len <= 1) {
+    return;
+  }
+  unsigned int next_arr_len = CEIL_DEV(array_len, BLOCK_SIZE);
+  unsigned int *next_array;
+  CUDA_ERROR_CHECK(cudaMalloc(&next_array, next_arr_len * sizeof(*next_array)));
+  run_cumsum<<<next_arr_len, BLOCK_SIZE>>>(array, next_array, array_len);
+  recursive_cumsum(next_array, next_arr_len);
+  down_propagate_cumsum<<<next_arr_len - 1, BLOCK_SIZE>>>(array, next_array,
+                                                          array_len);
+  CUDA_ERROR_CHECK(cudaFree(next_array));
 }

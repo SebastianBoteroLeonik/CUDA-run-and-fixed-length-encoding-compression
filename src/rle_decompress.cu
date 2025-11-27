@@ -3,9 +3,9 @@
 #include <cuda.h>
 #include <device_launch_parameters.h>
 
-__global__ void uchar_array_to_ullong_array(unsigned char *chars,
-                                            unsigned long long *llongs,
-                                            unsigned long long array_length) {
+__global__ void uchar_array_to_uint_array(unsigned char *chars,
+                                          unsigned int *llongs,
+                                          unsigned int array_length) {
   const long long global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
   if (global_thread_id >= array_length) {
     return;
@@ -13,53 +13,10 @@ __global__ void uchar_array_to_ullong_array(unsigned char *chars,
   llongs[global_thread_id] = chars[global_thread_id] + 1;
 }
 
-__global__ void run_cumsum(unsigned long long *array,
-                           unsigned long long *last_sums_in_chunks,
-                           unsigned long long array_length) {
-  const long long global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
-  if (global_thread_id >= array_length) {
-    return;
-  }
-  const unsigned int block_length =
-      blockDim.x * ((blockIdx.x + 1) * blockDim.x <= array_length) +
-      (array_length % blockDim.x) *
-          ((blockIdx.x + 1) * blockDim.x > array_length);
-  array[global_thread_id] = block_cumsum(array[global_thread_id]);
-  if (threadIdx.x == block_length - 1) {
-    last_sums_in_chunks[blockIdx.x] = array[global_thread_id];
-  }
-}
-
-__global__ void down_propagate_cumsum(unsigned long long *array,
-                                      unsigned long long *last_sums_in_chunks,
-                                      unsigned long long array_length) {
-  const long long global_thread_id =
-      blockDim.x * (blockIdx.x + 1) + threadIdx.x;
-  if (global_thread_id >= array_length) {
-    return;
-  }
-  array[global_thread_id] += last_sums_in_chunks[blockIdx.x];
-}
-
-__host__ void recursive_cumsum(unsigned long long *array,
-                               unsigned long long array_len) {
-  if (array_len <= 1) {
-    return;
-  }
-  unsigned long long next_arr_len = CEIL_DEV(array_len, BLOCK_SIZE);
-  unsigned long long *next_array;
-  CUDA_ERROR_CHECK(cudaMalloc(&next_array, next_arr_len * sizeof(*next_array)));
-  run_cumsum<<<next_arr_len, BLOCK_SIZE>>>(array, next_array, array_len);
-  recursive_cumsum(next_array, next_arr_len);
-  down_propagate_cumsum<<<next_arr_len - 1, BLOCK_SIZE>>>(array, next_array,
-                                                          array_len);
-  CUDA_ERROR_CHECK(cudaFree(next_array));
-}
-
-__host__ void cumsum_repetitions(unsigned long long **result,
+__host__ void cumsum_repetitions(unsigned int **result,
                                  struct rle_chunks *chunks,
-                                 unsigned long long compressed_array_length) {
-  unsigned long long *repetition_cumsums;
+                                 unsigned int compressed_array_length) {
+  unsigned int *repetition_cumsums;
   CUDA_ERROR_CHECK(
       cudaMalloc(&repetition_cumsums,
                  sizeof(*repetition_cumsums) * compressed_array_length));
@@ -68,16 +25,16 @@ __host__ void cumsum_repetitions(unsigned long long **result,
   struct rle_chunks host_chunks;
   CUDA_ERROR_CHECK(cudaMemcpy(&host_chunks, chunks, sizeof(host_chunks),
                               cudaMemcpyDeviceToHost));
-  uchar_array_to_ullong_array<<<number_of_blocks, BLOCK_SIZE>>>(
+  uchar_array_to_uint_array<<<number_of_blocks, BLOCK_SIZE>>>(
       host_chunks.repetitions, repetition_cumsums, compressed_array_length);
   recursive_cumsum(repetition_cumsums, compressed_array_length);
   *result = repetition_cumsums;
 }
 
-__global__ void
-decompress_rle_kernel(char *uncompressed_data, struct rle_chunks *chunks,
-                      unsigned long long *repetitions_cumsums,
-                      unsigned long long compressed_array_length) {
+__global__ void decompress_rle_kernel(char *uncompressed_data,
+                                      struct rle_chunks *chunks,
+                                      unsigned int *repetitions_cumsums,
+                                      unsigned int compressed_array_length) {
 
   const long long global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
   const int id = threadIdx.x;
@@ -88,7 +45,7 @@ decompress_rle_kernel(char *uncompressed_data, struct rle_chunks *chunks,
   if (global_thread_id >= compressed_array_length) {
     return;
   }
-  unsigned long long offset;
+  unsigned int offset;
   if (global_thread_id == 0) {
     offset = 0;
   } else {
@@ -115,7 +72,7 @@ __host__ unsigned char *decompress_rle(struct rle_data *compressed_data) {
   copy_rle_chunks(compressed_data->chunks, dev_chunks, HostToDevice,
                   compressed_data->number_of_chunks,
                   compressed_data->compressed_array_length);
-  unsigned long long *repetitions_cumsums;
+  unsigned int *repetitions_cumsums;
   CUDA_PERFORMANCE_CHECKPOINT(cumsum_repetitions)
   cumsum_repetitions(&repetitions_cumsums, dev_chunks,
                      compressed_data->compressed_array_length);

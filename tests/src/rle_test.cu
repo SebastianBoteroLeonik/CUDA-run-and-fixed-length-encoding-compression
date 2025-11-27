@@ -192,7 +192,7 @@ TEST(run_length_encoding, host_compress_rle) {
   unsigned int PERIOD = 19;
   unsigned char *data = (unsigned char *)malloc(TEST_DATA_LEN);
   EXPECT_NE(data, nullptr);
-  for (long long i = 0; i < TEST_DATA_LEN; i++) {
+  for (unsigned int i = 0; i < TEST_DATA_LEN; i++) {
     data[i] = i / (PERIOD) + 2 + (i % 1091 == 0);
   }
   struct rle_data *rle = compress_rle(data, TEST_DATA_LEN);
@@ -256,20 +256,19 @@ TEST(rle_utils, make_host_rle_chunk) {
   free(host_chunks);
 }
 
-__global__ void uchar_array_to_ullong_array(unsigned char *chars,
-                                            unsigned long long *llongs,
-                                            unsigned long long array_length);
+__global__ void uchar_array_to_uint_array(unsigned char *chars,
+                                          unsigned int *ints,
+                                          unsigned int array_length);
 
-__global__ void run_cumsum(unsigned long long *array,
-                           unsigned long long *last_sums_in_chunks,
-                           unsigned long long array_length);
+__global__ void run_cumsum(unsigned int *array,
+                           unsigned int *last_sums_in_chunks,
+                           unsigned int array_length);
 
-__global__ void down_propagate_cumsum(unsigned long long *array,
-                                      unsigned long long *last_sums_in_chunks,
-                                      unsigned long long array_length);
+__global__ void down_propagate_cumsum(unsigned int *array,
+                                      unsigned int *last_sums_in_chunks,
+                                      unsigned int array_length);
 
-__host__ void recursive_cumsum(unsigned long long *array,
-                               unsigned long long array_len);
+__host__ void recursive_cumsum(unsigned int *array, unsigned int array_len);
 
 TEST(rle_decoding, char_to_llong) {
   size_t SIZE = 2000;
@@ -278,117 +277,107 @@ TEST(rle_decoding, char_to_llong) {
     chars[i] = i;
   }
   unsigned char *dev_chars;
-  unsigned long long *longs;
-  unsigned long long *dev_longs;
+  unsigned int *ints;
+  unsigned int *dev_ints;
   CUDA_ERROR_CHECK(cudaMalloc(&dev_chars, SIZE));
-  CUDA_ERROR_CHECK(cudaMalloc(&dev_longs, sizeof(unsigned long long) * SIZE));
+  CUDA_ERROR_CHECK(cudaMalloc(&dev_ints, sizeof(unsigned int) * SIZE));
   CUDA_ERROR_CHECK(cudaMemcpy(dev_chars, chars, SIZE, cudaMemcpyHostToDevice));
-  uchar_array_to_ullong_array<<<CEIL_DEV(SIZE, BLOCK_SIZE), BLOCK_SIZE>>>(
-      dev_chars, dev_longs, SIZE);
+  uchar_array_to_uint_array<<<CEIL_DEV(SIZE, BLOCK_SIZE), BLOCK_SIZE>>>(
+      dev_chars, dev_ints, SIZE);
   CUDA_ERROR_CHECK(cudaDeviceSynchronize());
-  longs = (unsigned long long *)malloc(sizeof(unsigned long long) * SIZE);
-  CUDA_ERROR_CHECK(cudaMemcpy(longs, dev_longs,
-                              sizeof(unsigned long long) * SIZE,
+  ints = (unsigned int *)malloc(sizeof(unsigned int) * SIZE);
+  CUDA_ERROR_CHECK(cudaMemcpy(ints, dev_ints, sizeof(unsigned int) * SIZE,
                               cudaMemcpyDeviceToHost));
   CUDA_ERROR_CHECK(cudaFree(dev_chars));
-  CUDA_ERROR_CHECK(cudaFree(dev_longs));
+  CUDA_ERROR_CHECK(cudaFree(dev_ints));
   for (int i = 0; i < SIZE; i++) {
-    EXPECT_EQ(longs[i], chars[i] + 1);
+    EXPECT_EQ(ints[i], chars[i] + 1);
   }
   free(chars);
-  free(longs);
+  free(ints);
 }
 
 TEST(rle_decoding, run_cumsums) {
   constexpr size_t number_of_blocks = 3;
   size_t SIZE = number_of_blocks * BLOCK_SIZE;
-  unsigned long long *longs =
-      (unsigned long long *)malloc(sizeof(unsigned long long) * SIZE);
+  unsigned int *ints = (unsigned int *)malloc(sizeof(unsigned int) * SIZE);
   for (int i = 0; i < SIZE; i++) {
-    longs[i] = 1;
+    ints[i] = 1;
   }
-  unsigned long long *dev_longs, *dev_finals;
-  CUDA_ERROR_CHECK(cudaMalloc(&dev_longs, sizeof(unsigned long long) * SIZE));
+  unsigned int *dev_ints, *dev_finals;
+  CUDA_ERROR_CHECK(cudaMalloc(&dev_ints, sizeof(unsigned int) * SIZE));
   CUDA_ERROR_CHECK(
-      cudaMalloc(&dev_finals, sizeof(unsigned long long) * number_of_blocks));
-  CUDA_ERROR_CHECK(cudaMemcpy(dev_longs, longs,
-                              sizeof(unsigned long long) * SIZE,
+      cudaMalloc(&dev_finals, sizeof(unsigned int) * number_of_blocks));
+  CUDA_ERROR_CHECK(cudaMemcpy(dev_ints, ints, sizeof(unsigned int) * SIZE,
                               cudaMemcpyHostToDevice));
-  run_cumsum<<<number_of_blocks, BLOCK_SIZE>>>(dev_longs, dev_finals, SIZE);
-  CUDA_ERROR_CHECK(cudaMemcpy(longs, dev_longs,
-                              sizeof(unsigned long long) * SIZE,
+  run_cumsum<<<number_of_blocks, BLOCK_SIZE>>>(dev_ints, dev_finals, SIZE);
+  CUDA_ERROR_CHECK(cudaMemcpy(ints, dev_ints, sizeof(unsigned int) * SIZE,
                               cudaMemcpyDeviceToHost));
-  CUDA_ERROR_CHECK(cudaFree(dev_longs));
-  unsigned long long finals[number_of_blocks];
+  CUDA_ERROR_CHECK(cudaFree(dev_ints));
+  unsigned int finals[number_of_blocks];
   CUDA_ERROR_CHECK(cudaMemcpy(finals, dev_finals,
-                              sizeof(unsigned long long) * number_of_blocks,
+                              sizeof(unsigned int) * number_of_blocks,
                               cudaMemcpyDeviceToHost));
   CUDA_ERROR_CHECK(cudaFree(dev_finals));
   for (int i = 0; i < SIZE; i++) {
-    EXPECT_EQ(longs[i], i % BLOCK_SIZE + 1);
+    EXPECT_EQ(ints[i], i % BLOCK_SIZE + 1);
   }
   for (int i = 0; i < number_of_blocks; i++) {
     EXPECT_EQ(finals[i], BLOCK_SIZE);
   }
-  free(longs);
+  free(ints);
 }
 
 TEST(rle_decoding, down_propagate_cumsums) {
   constexpr size_t number_of_blocks = 3;
   size_t SIZE = number_of_blocks * BLOCK_SIZE;
-  unsigned long long *longs =
-      (unsigned long long *)malloc(sizeof(unsigned long long) * SIZE);
+  unsigned int *ints = (unsigned int *)malloc(sizeof(unsigned int) * SIZE);
   for (int i = 0; i < SIZE; i++) {
-    longs[i] = i % BLOCK_SIZE + 1;
+    ints[i] = i % BLOCK_SIZE + 1;
   }
-  unsigned long long *dev_longs, *dev_finals;
-  CUDA_ERROR_CHECK(cudaMalloc(&dev_longs, sizeof(unsigned long long) * SIZE));
+  unsigned int *dev_ints, *dev_finals;
+  CUDA_ERROR_CHECK(cudaMalloc(&dev_ints, sizeof(unsigned int) * SIZE));
   CUDA_ERROR_CHECK(
-      cudaMalloc(&dev_finals, sizeof(unsigned long long) * number_of_blocks));
-  CUDA_ERROR_CHECK(cudaMemcpy(dev_longs, longs,
-                              sizeof(unsigned long long) * SIZE,
+      cudaMalloc(&dev_finals, sizeof(unsigned int) * number_of_blocks));
+  CUDA_ERROR_CHECK(cudaMemcpy(dev_ints, ints, sizeof(unsigned int) * SIZE,
                               cudaMemcpyHostToDevice));
-  unsigned long long finals[number_of_blocks];
+  unsigned int finals[number_of_blocks];
   for (int i = 0; i < number_of_blocks; i++) {
     finals[i] = BLOCK_SIZE * (i + 1);
   }
   CUDA_ERROR_CHECK(cudaMemcpy(dev_finals, finals,
-                              sizeof(unsigned long long) * number_of_blocks,
+                              sizeof(unsigned int) * number_of_blocks,
                               cudaMemcpyHostToDevice));
-  down_propagate_cumsum<<<number_of_blocks - 1, BLOCK_SIZE>>>(dev_longs,
+  down_propagate_cumsum<<<number_of_blocks - 1, BLOCK_SIZE>>>(dev_ints,
                                                               dev_finals, SIZE);
-  CUDA_ERROR_CHECK(cudaMemcpy(longs, dev_longs,
-                              sizeof(unsigned long long) * SIZE,
+  CUDA_ERROR_CHECK(cudaMemcpy(ints, dev_ints, sizeof(unsigned int) * SIZE,
                               cudaMemcpyDeviceToHost));
-  CUDA_ERROR_CHECK(cudaFree(dev_longs));
+  CUDA_ERROR_CHECK(cudaFree(dev_ints));
   CUDA_ERROR_CHECK(cudaFree(dev_finals));
   for (int i = 0; i < SIZE; i++) {
-    EXPECT_EQ(longs[i], i + 1);
+    EXPECT_EQ(ints[i], i + 1);
   }
-  free(longs);
+  free(ints);
 }
 
 TEST(rle_decoding, rec_cumsum) {
   size_t SIZE = 2000 * 1024;
-  unsigned long long *longs =
-      (unsigned long long *)malloc(sizeof(unsigned long long) * SIZE);
+  unsigned int *ints = (unsigned int *)malloc(sizeof(unsigned int) * SIZE);
   for (int i = 0; i < SIZE; i++) {
-    longs[i] = 1;
+    ints[i] = 1;
   }
-  unsigned long long *dev_longs;
-  CUDA_ERROR_CHECK(cudaMalloc(&dev_longs, sizeof(unsigned long long) * SIZE));
-  CUDA_ERROR_CHECK(cudaMemcpy(dev_longs, longs,
-                              sizeof(unsigned long long) * SIZE,
+  unsigned int *dev_ints;
+  CUDA_ERROR_CHECK(cudaMalloc(&dev_ints, sizeof(unsigned int) * SIZE));
+  CUDA_ERROR_CHECK(cudaMemcpy(dev_ints, ints, sizeof(unsigned int) * SIZE,
                               cudaMemcpyHostToDevice));
-  recursive_cumsum(dev_longs, SIZE);
-  CUDA_ERROR_CHECK(cudaMemcpy(longs, dev_longs,
-                              sizeof(unsigned long long) * SIZE,
+  recursive_cumsum(dev_ints, SIZE);
+  CUDA_ERROR_CHECK(cudaMemcpy(ints, dev_ints, sizeof(unsigned int) * SIZE,
                               cudaMemcpyDeviceToHost));
-  CUDA_ERROR_CHECK(cudaFree(dev_longs));
+  CUDA_ERROR_CHECK(cudaFree(dev_ints));
   for (int i = 0; i < SIZE; i++) {
-    EXPECT_EQ(longs[i], i + 1);
+    EXPECT_EQ(ints[i], i + 1);
   }
-  free(longs);
+  free(ints);
 }
 
 // __global__ void print_dev_rle(struct rle_chunks *chunks, unsigned int len) {
