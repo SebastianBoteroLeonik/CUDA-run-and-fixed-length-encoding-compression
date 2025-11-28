@@ -12,18 +12,24 @@ __global__ void run_block_cumsum(int *vals) {
   vals[threadIdx.x] = block_cumsum(vals[threadIdx.x]);
 }
 
-__global__ void run_index_finder(const unsigned char *data,
-                                 unsigned int data_len, int *new_indexes) {
-  const unsigned int block_length =
-      blockDim.x * ((blockIdx.x + 1) * blockDim.x <= data_len) +
-      (data_len % blockDim.x) * ((blockIdx.x + 1) * blockDim.x > data_len);
-  find_indexes_after_compression(data, new_indexes, block_length);
-}
+__global__ void
+find_differing_neighbours(unsigned char *data,
+                          unsigned int *diff_from_prev_indicators, size_t len);
+
+__global__ void find_segment_end(unsigned int *scan_result,
+                                 unsigned *segment_ends, size_t len);
+
+__global__ void subtract_segment_begining(unsigned int *scan_result,
+                                          unsigned *segment_lengths_out,
+                                          unsigned int *overflows,
+                                          unsigned char *data,
+                                          unsigned char *compressed_data_vals,
+                                          size_t len);
 
 __global__ void rle_compression_kernel(const unsigned char *data,
-                                       size_t data_len, struct rle_chunks *rle);
+                                       size_t data_len, struct rle_data *rle);
 
-TEST(run_length_encoding, warp_sum) {
+TEST(rle_common, warp_sum) {
   int vals[32];
   for (int i = 0; i < 32; i++) {
     vals[i] = i;
@@ -45,7 +51,7 @@ TEST(run_length_encoding, warp_sum) {
 }
 
 #define BLOCK_SIZE 1024
-TEST(run_length_encoding, block_sum) {
+TEST(rle_common, block_sum) {
   int vals[BLOCK_SIZE];
   for (int i = 0; i < BLOCK_SIZE; i++) {
     vals[i] = i;
@@ -66,7 +72,7 @@ TEST(run_length_encoding, block_sum) {
   CUDA_ERROR_CHECK(cudaFree(dev_vals));
 }
 
-TEST(run_length_encoding, partial_block_sum) {
+TEST(rle_common, partial_block_sum) {
   int vals[BLOCK_SIZE];
   int *dev_vals;
   CUDA_ERROR_CHECK(cudaMalloc(&dev_vals, BLOCK_SIZE * sizeof(int)));
@@ -90,105 +96,130 @@ TEST(run_length_encoding, partial_block_sum) {
   CUDA_ERROR_CHECK(cudaFree(dev_vals));
 }
 
-TEST(run_length_encoding, find_index_after_compression) {
-  int LEN = 1020;
-  unsigned char data[LEN];
-  for (int i = 0; i < LEN; i++) {
-    data[i] = i / 16 + 200;
-  }
-  int *new_indexes;
-  CUDA_ERROR_CHECK(cudaMalloc(&new_indexes, (LEN + 1) * sizeof(int)));
+#define CEIL_DEV(num, div) ((num / div) + (num % div != 0))
+
+TEST(run_length_encoding, find_diffs) {
+  constexpr int len = 4000;
+  constexpr int period = 23;
   unsigned char *dev_data;
-  CUDA_ERROR_CHECK(cudaMalloc(&dev_data, LEN));
-  CUDA_ERROR_CHECK(cudaMemcpy(dev_data, data, LEN, cudaMemcpyHostToDevice));
-  run_index_finder<<<1, LEN>>>(dev_data, LEN, new_indexes);
+  unsigned char data[len];
+  unsigned int *dev_diffs;
+  unsigned int diffs[len];
+  for (int i = 0; i < len; i++) {
+    data[i] = i / period;
+  }
+  CUDA_ERROR_CHECK(cudaMalloc(&dev_data, len * sizeof(*dev_data)));
+  CUDA_ERROR_CHECK(
+      cudaMemcpy(dev_data, data, sizeof(*data) * len, cudaMemcpyHostToDevice));
+  CUDA_ERROR_CHECK(cudaMalloc(&dev_diffs, len * sizeof(*dev_diffs)));
+  find_differing_neighbours<<<CEIL_DEV(len, BLOCK_SIZE), BLOCK_SIZE>>>(
+      dev_data, dev_diffs, len);
   CUDA_ERROR_CHECK(cudaDeviceSynchronize());
-  int new_indexes_host[LEN + 1];
-  CUDA_ERROR_CHECK(cudaMemcpy(new_indexes_host, new_indexes,
-                              (LEN + 1) * sizeof(int), cudaMemcpyDeviceToHost));
-  for (int i = 0; i < LEN; i++) {
-    EXPECT_EQ(new_indexes_host[i], i / 16);
+  CUDA_ERROR_CHECK(cudaFree(dev_data));
+  CUDA_ERROR_CHECK(cudaMemcpy(diffs, dev_diffs, sizeof(*diffs) * len,
+                              cudaMemcpyDeviceToHost));
+  CUDA_ERROR_CHECK(cudaFree(dev_diffs));
+  for (int i = 0; i < len; i++) {
+    EXPECT_EQ(diffs[i], i ? (i - 1) / period != i / period : 0);
   }
 }
 
-#define CEIL_DEV(num, div) ((num / div) + (num % div != 0))
-#define TEST_COMPRESSION_KERNEL_TEMPLATE(TEST_DATA_LEN, PERIOD)                \
-  unsigned char *data = (unsigned char *)malloc(TEST_DATA_LEN);                \
-  EXPECT_NE(data, nullptr);                                                    \
-  unsigned char *dev_data;                                                     \
-  for (int i = 0; i < TEST_DATA_LEN; i++) {                                    \
-    data[i] = i / (PERIOD) + 2 + (i % 2909 == 0);                              \
-  }                                                                            \
-  CUDA_ERROR_CHECK(cudaMalloc(&dev_data, TEST_DATA_LEN));                      \
-  CUDA_ERROR_CHECK(cudaMemcpy(dev_data, data,                                  \
-                              sizeof(unsigned char) * TEST_DATA_LEN,           \
-                              cudaMemcpyHostToDevice));                        \
-  struct rle_data out;                                                         \
-  out.number_of_chunks = CEIL_DEV(TEST_DATA_LEN, 1024);                        \
-  out.chunks = make_host_rle_chunks(out.number_of_chunks, BLOCK_SIZE);         \
-  EXPECT_NE(out.chunks, nullptr);                                              \
-  struct rle_chunks *compressed =                                              \
-      make_device_rle_chunks(out.number_of_chunks, BLOCK_SIZE);                \
-  compressed = make_device_rle_chunks(out.number_of_chunks, BLOCK_SIZE);       \
-  rle_compression_kernel<<<out.number_of_chunks, 1024>>>(                      \
-      dev_data, TEST_DATA_LEN, compressed);                                    \
-  CUDA_ERROR_CHECK(cudaDeviceSynchronize());                                   \
-  CUDA_ERROR_CHECK(cudaFree(dev_data));                                        \
-  copy_rle_chunks(compressed, out.chunks, DeviceToHost, out.number_of_chunks,  \
-                  out.number_of_chunks *BLOCK_SIZE);                           \
-  CUDA_ERROR_CHECK(cudaFree(compressed));                                      \
-  unsigned char decomp_data[TEST_DATA_LEN];                                    \
-  int counter = 0;                                                             \
-  EXPECT_GT(out.chunks->chunk_lengths[0], 0);                                  \
-  /* EXPECT_GT(out.chunks[1].array_length, 0); */                              \
-  /* EXPECT_GE((int)out.chunks[0].lengths[0], 0); */                           \
-  /* EXPECT_GE((int)out.chunks[1].lengths[0], 0); */                           \
-  for (int chunk = 0; chunk < out.number_of_chunks; chunk++) {                 \
-    EXPECT_LE(out.chunks->chunk_lengths[chunk], 1024);                         \
-    EXPECT_GT(out.chunks->chunk_lengths[chunk], 0);                            \
-    for (int i = 0; i < out.chunks->chunk_lengths[chunk]; i++) {               \
-      EXPECT_LT(out.chunks->values[out.chunks->chunk_starts[chunk] + i], 256); \
-      EXPECT_GE(out.chunks->values[out.chunks->chunk_starts[chunk] + i], 0);   \
-      EXPECT_GE(out.chunks->repetitions[out.chunks->chunk_starts[chunk] + i],  \
-                0);                                                            \
-      EXPECT_LT(out.chunks->repetitions[out.chunks->chunk_starts[chunk] + i],  \
-                256);                                                          \
-      for (int j = 0;                                                          \
-           j <= out.chunks->repetitions[out.chunks->chunk_starts[chunk] + i];  \
-           j++) {                                                              \
-        decomp_data[counter] =                                                 \
-            out.chunks->values[out.chunks->chunk_starts[chunk] + i];           \
-        counter++;                                                             \
-        EXPECT_LE(counter, TEST_DATA_LEN);                                     \
-      }                                                                        \
-    }                                                                          \
-  }                                                                            \
-  for (int i = 0; i < TEST_DATA_LEN; i++) {                                    \
-    EXPECT_EQ(decomp_data[i], data[i]);                                        \
-    if (decomp_data[i] != data[i]) {                                           \
-      printf("i:%d, period: %d\n", i, PERIOD);                                 \
-    }                                                                          \
-  }                                                                            \
-  EXPECT_EQ(counter, TEST_DATA_LEN);                                           \
-  free(out.chunks);                                                            \
-  free(data);
+TEST(run_length_encoding, find_segment_ends) {
+  constexpr int len = 4000;
+  constexpr int period = 23;
+  unsigned int *dev_scan_array;
+  unsigned int scan_array[len];
+  unsigned int *dev_segment_ends;
+  unsigned int segment_ends[len];
+  unsigned int true_segment_ends[len];
+  int acc = 0;
+  for (int i = 0; i < len; i++) {
+    int change = i ? ((i - 1) / period != i / period) : 0;
+    acc += change;
+    scan_array[i] = acc;
+    if (change) {
+      true_segment_ends[acc - 1] = i - 1;
+    }
+  }
+  CUDA_ERROR_CHECK(cudaMalloc(&dev_scan_array, len * sizeof(*dev_scan_array)));
+  CUDA_ERROR_CHECK(cudaMemcpy(dev_scan_array, scan_array,
+                              sizeof(*scan_array) * len,
+                              cudaMemcpyHostToDevice));
+  CUDA_ERROR_CHECK(
+      cudaMalloc(&dev_segment_ends, len * sizeof(*dev_segment_ends)));
+  find_segment_end<<<CEIL_DEV(len, BLOCK_SIZE), BLOCK_SIZE>>>(
+      dev_scan_array, dev_segment_ends, len);
+  CUDA_ERROR_CHECK(cudaDeviceSynchronize());
+  CUDA_ERROR_CHECK(cudaMemcpy(segment_ends, dev_segment_ends,
+                              sizeof(*segment_ends) * len,
+                              cudaMemcpyDeviceToHost));
+  for (int i = 0; i < acc; i++) {
+    EXPECT_EQ(segment_ends[i], true_segment_ends[i]);
+  }
+}
 
-TEST(run_length_encoding,
-     short_freq_compression_kernel){TEST_COMPRESSION_KERNEL_TEMPLATE(1024, 19)}
+TEST(run_length_encoding, subtract_beginings) {
+  constexpr int len = 4000;
+  constexpr int period = 400;
+  unsigned int *dev_scan_array;
+  unsigned int scan_array[len];
+  unsigned int segment_lengths[len];
+  unsigned int *dev_segment_ends;
+  unsigned int segment_ends[len];
+  unsigned int *dev_overflows;
+  unsigned int overflows[len];
+  unsigned char *dev_data;
+  unsigned char data[len];
+  unsigned char *dev_vals;
+  unsigned char vals[len];
+  int acc = 0;
+  for (int i = 0; i < len; i++) {
+    data[i] = i / period;
+    int change = i ? ((i - 1) / period != i / period) : 0;
+    acc += change;
+    scan_array[i] = acc;
+    if (change) {
+      segment_ends[acc - 1] = i - 1;
+    }
+  }
+  CUDA_ERROR_CHECK(cudaMalloc(&dev_data, len * sizeof(*dev_data)));
+  CUDA_ERROR_CHECK(
+      cudaMemcpy(dev_data, data, sizeof(*data) * len, cudaMemcpyHostToDevice));
+  CUDA_ERROR_CHECK(cudaMalloc(&dev_scan_array, len * sizeof(*dev_scan_array)));
+  CUDA_ERROR_CHECK(cudaMemcpy(dev_scan_array, scan_array,
+                              sizeof(*scan_array) * len,
+                              cudaMemcpyHostToDevice));
+  CUDA_ERROR_CHECK(
+      cudaMalloc(&dev_segment_ends, len * sizeof(*dev_segment_ends)));
+  CUDA_ERROR_CHECK(cudaMemcpy(dev_segment_ends, segment_ends,
+                              sizeof(*segment_ends) * len,
+                              cudaMemcpyHostToDevice));
+  CUDA_ERROR_CHECK(cudaMalloc(&dev_overflows, len * sizeof(*dev_overflows)));
+  CUDA_ERROR_CHECK(cudaMalloc(&dev_vals, len * sizeof(*dev_vals)));
+  subtract_segment_begining<<<CEIL_DEV(len, BLOCK_SIZE), BLOCK_SIZE>>>(
+      dev_scan_array, dev_segment_ends, dev_overflows, dev_data, dev_vals, len);
+  CUDA_ERROR_CHECK(cudaDeviceSynchronize());
+  CUDA_ERROR_CHECK(cudaMemcpy(overflows, dev_overflows,
+                              sizeof(*overflows) * len,
+                              cudaMemcpyDeviceToHost));
+  CUDA_ERROR_CHECK(cudaMemcpy(segment_lengths, dev_segment_ends,
+                              sizeof(*segment_lengths) * len,
+                              cudaMemcpyDeviceToHost));
+  CUDA_ERROR_CHECK(cudaFree(dev_scan_array));
+  CUDA_ERROR_CHECK(cudaFree(dev_segment_ends));
+  CUDA_ERROR_CHECK(cudaFree(dev_overflows));
+  CUDA_ERROR_CHECK(cudaFree(dev_data));
+  CUDA_ERROR_CHECK(cudaFree(dev_vals));
+  for (int i = 0; i < acc; i++) {
+    EXPECT_EQ(segment_lengths[i], period - 1);
+  }
+  for (int i = 0; i < acc; i++) {
+    EXPECT_EQ(overflows[i], period / 256);
+  }
+}
 
-TEST(run_length_encoding, long_freq_compression_kernel){
-    TEST_COMPRESSION_KERNEL_TEMPLATE((2048 * 32 + 9), 19)}
-
-TEST(run_length_encoding, short_infreq_compression_kernel){
-    TEST_COMPRESSION_KERNEL_TEMPLATE(4096, 1091)}
-
-TEST(run_length_encoding, long_infreq_compression_kernel){
-    TEST_COMPRESSION_KERNEL_TEMPLATE((2048 * 32 + 9), 1091)}
-
-TEST(run_length_encoding, host_compress_rle) {
+TEST(run_length_encoding, compress_rle) {
   unsigned int TEST_DATA_LEN = (1 << 25);
-  // unsigned int TEST_DATA_LEN = 2048 * 2048 ;
-  printf("running on %dMB\n", TEST_DATA_LEN / (1024 * 1024));
   unsigned int PERIOD = 19;
   unsigned char *data = (unsigned char *)malloc(TEST_DATA_LEN);
   EXPECT_NE(data, nullptr);
@@ -196,64 +227,47 @@ TEST(run_length_encoding, host_compress_rle) {
     data[i] = i / (PERIOD) + 2 + (i % 1091 == 0);
   }
   struct rle_data *rle = compress_rle(data, TEST_DATA_LEN);
-  // EXPECT_NE(rle, nullptr);
   unsigned char *decomp_data = (unsigned char *)malloc(TEST_DATA_LEN);
   int counter = 0;
-  EXPECT_GT(rle->chunks->chunk_lengths[0], 0);
-  for (int chunk = 0; chunk < rle->number_of_chunks; chunk++) {
-    EXPECT_LE(rle->chunks->chunk_lengths[chunk], 1024);
-    EXPECT_GT(rle->chunks->chunk_lengths[chunk], 0);
-    for (int i = 0; i < rle->chunks->chunk_lengths[chunk]; i++) {
-      EXPECT_LT(rle->chunks->values[rle->chunks->chunk_starts[chunk] + i], 256);
-      EXPECT_GE(rle->chunks->values[rle->chunks->chunk_starts[chunk] + i], 0);
-      EXPECT_GE(rle->chunks->repetitions[rle->chunks->chunk_starts[chunk] + i],
-                0);
-      EXPECT_LT(rle->chunks->repetitions[rle->chunks->chunk_starts[chunk] + i],
-                256);
-      for (int j = 0;
-           j <= rle->chunks->repetitions[rle->chunks->chunk_starts[chunk] + i];
-           j++) {
-        decomp_data[counter] =
-            rle->chunks->values[rle->chunks->chunk_starts[chunk] + i];
-        counter++;
-        EXPECT_LE(counter, TEST_DATA_LEN);
-      }
+  for (int i = 0; i < rle->compressed_array_length; i++) {
+    EXPECT_GE(rle->values[i], 0);
+    EXPECT_LT(rle->values[i], 256);
+    EXPECT_GE(rle->repetitions[i], 0);
+    EXPECT_LT(rle->repetitions[i], 256);
+    for (int j = 0; j <= rle->repetitions[i]; j++) {
+      decomp_data[counter] = rle->values[i];
+      counter++;
+      EXPECT_LE(counter, TEST_DATA_LEN);
     }
   }
-  for (long long i = 0; i < TEST_DATA_LEN; i++) {
+  for (unsigned int i = 0; i < TEST_DATA_LEN; i++) {
     EXPECT_EQ(decomp_data[i], data[i]);
     if (decomp_data[i] != data[i]) {
-      printf("i: %lld, period: %d\n", i, PERIOD);
+      printf("i: %u, period: %d\n", i, PERIOD);
     }
   }
   EXPECT_EQ(counter, TEST_DATA_LEN);
   free(data);
   free(decomp_data);
-  free(rle->chunks);
   free(rle);
 }
 
 TEST(rle_utils, make_device_rle_chunk) {
-  int number_og_chunks = 100;
-  int chunk_cap = BLOCK_SIZE;
-  struct rle_chunks *dev_chunks =
-      make_device_rle_chunks(number_og_chunks, chunk_cap);
-  CUDA_ERROR_CHECK(cudaFree(dev_chunks));
+  int capacity = 100;
+  struct rle_data *dev_data = make_device_rle_data(capacity);
+  CUDA_ERROR_CHECK(cudaFree(dev_data));
 }
 
 TEST(rle_utils, make_host_rle_chunk) {
-  int number_of_chunks = 100;
-  int chunk_cap = BLOCK_SIZE;
-  struct rle_chunks *host_chunks =
-      make_host_rle_chunks(number_of_chunks, chunk_cap);
-  for (int i = 0; i < number_of_chunks; i++) {
-    int dummy = host_chunks->chunk_lengths[i];
-    for (int j = 0; j < host_chunks->chunk_lengths[i]; j++) {
-      dummy = host_chunks->repetitions[i * BLOCK_SIZE + j];
-      dummy = host_chunks->values[i * BLOCK_SIZE + j];
-    }
+  int capacity = 100;
+  struct rle_data *host_data = make_host_rle_data(capacity);
+  int dummy = host_data->compressed_array_length;
+  dummy = host_data->total_data_length;
+  for (int i = 0; i < capacity; i++) {
+    dummy = host_data->repetitions[i];
+    dummy = host_data->values[i];
   }
-  free(host_chunks);
+  free(host_data);
 }
 
 __global__ void uchar_array_to_uint_array(unsigned char *chars,
@@ -380,43 +394,23 @@ TEST(rle_decoding, rec_cumsum) {
   free(ints);
 }
 
-// __global__ void print_dev_rle(struct rle_chunks *chunks, unsigned int len) {
-//   printf("chunks->chunk_starts[0] = %lu\n", chunks->chunk_starts[0]);
-//   printf("chunks->chunk_lengths[0] = %d\n", chunks->chunk_lengths[0]);
-//   for (int i = 0; i < len; i++) {
-//     printf("rep[%d] = %d\n", i, chunks->repetitions[i]);
-//     printf("val[%d] = %d\n", i, chunks->values[i]);
-//   }
-// }
-// __host__ void run_pdr(struct rle_chunks *chunks, unsigned int len) {
-//   print_dev_rle<<<1, 1>>>(chunks, len);
-//   cudaDeviceSynchronize();
-// }
-
-TEST(rle_decoding, decode) {
-  struct rle_data data;
-  data.compressed_array_length = 2000 * 1024;
-  data.number_of_chunks = 1;
-  data.chunks = make_host_rle_chunks(1, data.compressed_array_length);
-  data.chunks->chunk_starts[0] = 0;
-  data.chunks->chunk_lengths[0] = data.compressed_array_length;
-  data.total_data_length = 0;
-  for (int i = 0; i < data.compressed_array_length; i++) {
-    data.chunks->repetitions[i] = i % 5;
-    data.chunks->values[i] = i % 17;
-    data.total_data_length += 1 + (i % 5);
+TEST(rle_decoding, decode_rle) {
+  int capacity = 2000;
+  struct rle_data *data = make_host_rle_data(capacity);
+  data->compressed_array_length = 2000;
+  data->total_data_length = 0;
+  for (int i = 0; i < data->compressed_array_length; i++) {
+    data->repetitions[i] = i % 5;
+    data->values[i] = i % 17;
+    data->total_data_length += 1 + (i % 5);
   }
-  unsigned char *decomp = decompress_rle(&data);
+  unsigned char *decomp = decompress_rle(data);
   int counter = 0;
-  for (int i = 0; i < data.compressed_array_length; i++) {
+  for (int i = 0; i < data->compressed_array_length; i++) {
     for (int j = 0; j <= i % 5; j++) {
-      // printf("i = %d, j = %d, counter = %d, decomp[counter] = %d\n", i, j,
-      //        counter, decomp[counter]);
       EXPECT_EQ(decomp[counter], i % 17);
       counter++;
     }
-    // printf("i = %d\n", i);
   }
-  fflush(stdout);
-  EXPECT_EQ(counter, data.total_data_length);
+  EXPECT_EQ(counter, data->total_data_length);
 }

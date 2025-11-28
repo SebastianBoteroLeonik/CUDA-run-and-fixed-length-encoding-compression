@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
       int data_length;
       unsigned char *binary_data =
           read_binary_file(input_file_name, &data_length);
-      printf("data_length = %d\n", data_length);
+      // printf("data_length = %d\n", data_length);
       struct fle_data *fle = fle_compress(binary_data, data_length);
       write_fle_to_file(fle, output_file_name);
     }
@@ -54,10 +54,10 @@ int main(int argc, char *argv[]) {
       int data_length;
       unsigned char *binary_data =
           read_binary_file(input_file_name, &data_length);
-      printf("data_length = %d\n", data_length);
+      // printf("data_length = %d\n", data_length);
       struct rle_data *rle = compress_rle(binary_data, data_length);
       write_rle_to_file(rle, output_file_name);
-      printf("%d\n", rle->compressed_array_length);
+      // printf("%d\n", rle->compressed_array_length);
     }
   }
   // imgRawImage_t *img = loadJpegImageFile("sample-images/docs/image-1.jpg");

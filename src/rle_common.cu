@@ -2,57 +2,59 @@
 #include "rle.h"
 #include <stddef.h>
 
-__host__ struct rle_chunks *make_device_rle_chunks(size_t number_of_chunks,
-                                                   size_t chunk_capacity) {
-  struct rle_chunks *chunks;
+__host__ struct rle_data *make_device_rle_data(unsigned int capacity) {
+  struct rle_data *data;
   unsigned char *arena;
-  CUDA_ERROR_CHECK(cudaMalloc(&arena, sizeof(struct rle_chunks) +
-                                          (sizeof(chunks->chunk_lengths) +
-                                           sizeof(chunks->chunk_starts) +
-                                           2 * chunk_capacity) *
-                                              number_of_chunks));
+  CUDA_ERROR_CHECK(cudaMalloc(
+      &arena,
+      sizeof(*data) + (sizeof(*data->repetitions + *data->values)) * capacity));
 
-  chunks = (struct rle_chunks *)arena;
-  arena = arena + sizeof(struct rle_chunks);
-  // CUDA_ERROR_CHECK(cudaMalloc(&arena, 1024 * sizeof(long)));
-  CUDA_ERROR_CHECK(cudaMemcpy(&(chunks->chunk_starts), &arena, sizeof(arena),
+  data = (struct rle_data *)arena;
+  arena = arena + sizeof(*data);
+  // CUDA_ERROR_CHECK(cudaMalloc(&arena,  * sizeof()));
+  CUDA_ERROR_CHECK(cudaMemcpy(&(data->repetitions), &arena, sizeof(arena),
                               cudaMemcpyHostToDevice));
-  arena += sizeof(chunks->chunk_starts[0]) * number_of_chunks;
-  CUDA_ERROR_CHECK(cudaMemcpy(&(chunks->chunk_lengths), &arena, sizeof(arena),
+  arena += sizeof(*data->repetitions) * capacity;
+  CUDA_ERROR_CHECK(cudaMemcpy(&(data->values), &arena, sizeof(arena),
                               cudaMemcpyHostToDevice));
-  arena += sizeof(chunks->chunk_lengths[0]) * number_of_chunks;
-  CUDA_ERROR_CHECK(cudaMemcpy(&(chunks->repetitions), &arena, sizeof(arena),
-                              cudaMemcpyHostToDevice));
-  arena += sizeof(chunks->repetitions[0]) * number_of_chunks * chunk_capacity;
-  CUDA_ERROR_CHECK(cudaMemcpy(&(chunks->values), &arena, sizeof(arena),
-                              cudaMemcpyHostToDevice));
-  return chunks;
+  CUDA_ERROR_CHECK(cudaMemcpy(&(data->compressed_array_length), &capacity,
+                              sizeof(capacity), cudaMemcpyHostToDevice));
+  // arena += sizeof(data->chunk_starts[0]) * number_of_data;
+  // CUDA_ERROR_CHECK(cudaMemcpy(&(data->chunk_lengths), &arena, sizeof(arena),
+  //                             cudaMemcpyHostToDevice));
+  // arena += sizeof(data->chunk_lengths[0]) * number_of_data;
+  // CUDA_ERROR_CHECK(cudaMemcpy(&(data->repetitions), &arena, sizeof(arena),
+  //                             cudaMemcpyHostToDevice));
+  // arena += sizeof(data->repetitions[0]) * number_of_data * chunk_capacity;
+  // CUDA_ERROR_CHECK(cudaMemcpy(&(data->values), &arena, sizeof(arena),
+  //                             cudaMemcpyHostToDevice));
+  return data;
 }
 
-__host__ struct rle_chunks *make_host_rle_chunks(size_t number_of_chunks,
-                                                 size_t chunk_capacity) {
-  struct rle_chunks *chunks;
+__host__ struct rle_data *make_host_rle_data(unsigned int capacity) {
+  struct rle_data *data;
   unsigned char *arena = (unsigned char *)malloc(
-      sizeof(struct rle_chunks) +
-      (sizeof(chunks->chunk_lengths) + sizeof(chunks->chunk_starts) +
-       2 * chunk_capacity) *
-          number_of_chunks);
-  chunks = (struct rle_chunks *)arena;
-  arena = arena + sizeof(struct rle_chunks);
-  chunks->chunk_starts = (unsigned long *)arena;
-  arena = arena + sizeof(chunks->chunk_starts[0]) * number_of_chunks;
-  chunks->chunk_lengths = (unsigned int *)arena;
-  arena += sizeof(chunks->chunk_lengths[0]) * number_of_chunks;
-  chunks->repetitions = arena;
-  arena += sizeof(chunks->repetitions[0]) * number_of_chunks * chunk_capacity;
-  chunks->values = arena;
+      sizeof(*data) +
+      (sizeof(*data->repetitions) + sizeof(*data->values)) * capacity);
+  data = (struct rle_data *)arena;
+  arena = arena + sizeof(*data);
+  data->repetitions = arena;
+  arena = arena + sizeof(*data->repetitions) * capacity;
+  data->values = arena;
+  data->compressed_array_length = capacity;
+  // data->chunk_starts = (unsigned long *)arena;
+  // arena = arena + sizeof(data->chunk_starts[0]) * number_of_data;
+  // data->chunk_lengths = (unsigned int *)arena;
+  // arena += sizeof(data->chunk_lengths[0]) * number_of_chunks;
+  // data->repetitions = arena;
+  // arena += sizeof(data->repetitions[0]) * number_of_chunks * chunk_capacity;
+  // data->values = arena;
 
-  return chunks;
+  return data;
 }
 
-__host__ void copy_rle_chunks(struct rle_chunks *src, struct rle_chunks *dst,
-                              enum cpyKind kind, size_t number_of_chunks,
-                              ssize_t total_array_length) {
+__host__ void copy_rle_data(struct rle_data *src, struct rle_data *dst,
+                            enum cpyKind kind, unsigned capacity) {
   enum cudaMemcpyKind cudakind;
   switch (kind) {
   case DeviceToHost:
@@ -67,28 +69,28 @@ __host__ void copy_rle_chunks(struct rle_chunks *src, struct rle_chunks *dst,
   default:
     exit(EXIT_FAILURE);
   }
+  CUDA_ERROR_CHECK(cudaMemcpy(&(dst->total_data_length),
+                              &(src->total_data_length),
+                              sizeof(src->total_data_length), cudakind));
+  CUDA_ERROR_CHECK(cudaMemcpy(&(dst->compressed_array_length),
+                              &src->compressed_array_length,
+                              sizeof(src->compressed_array_length), cudakind));
   if (cudakind == cudaMemcpyDeviceToHost ||
       cudakind == cudaMemcpyDeviceToDevice) {
-    struct rle_chunks dummy;
+    struct rle_data dummy;
     CUDA_ERROR_CHECK(
         cudaMemcpy(&dummy, src, sizeof(dummy), cudaMemcpyDeviceToHost));
     src = &dummy;
   }
   if (cudakind == cudaMemcpyHostToDevice ||
       cudakind == cudaMemcpyDeviceToDevice) {
-    struct rle_chunks dummy;
+    struct rle_data dummy;
     CUDA_ERROR_CHECK(
         cudaMemcpy(&dummy, dst, sizeof(dummy), cudaMemcpyDeviceToHost));
     dst = &dummy;
   }
-  CUDA_ERROR_CHECK(cudaMemcpy(dst->chunk_starts, src->chunk_starts,
-                              sizeof(*src->chunk_starts) * number_of_chunks,
-                              cudakind));
-  CUDA_ERROR_CHECK(cudaMemcpy(dst->chunk_lengths, src->chunk_lengths,
-                              sizeof(*src->chunk_lengths) * number_of_chunks,
-                              cudakind));
   CUDA_ERROR_CHECK(cudaMemcpy(dst->repetitions, src->repetitions,
-                              total_array_length, cudakind));
-  CUDA_ERROR_CHECK(
-      cudaMemcpy(dst->values, src->values, total_array_length, cudakind));
+                              sizeof(*src->repetitions) * capacity, cudakind));
+  CUDA_ERROR_CHECK(cudaMemcpy(dst->values, src->values,
+                              sizeof(*src->values) * capacity, cudakind));
 }

@@ -60,24 +60,21 @@ V
  */
 TEST(file_io, write_rle) {
   char file_name[40] = "test_outputs/write_file.rle";
-  struct rle_data data;
-  data.total_data_length = 8;
-  data.number_of_chunks = 2;
-  struct rle_chunks *chunks = make_host_rle_chunks(data.number_of_chunks, 2);
-  chunks->chunk_starts[0] = 0;
-  chunks->chunk_starts[1] = 2;
-  chunks->chunk_lengths[0] = 2;
-  chunks->chunk_lengths[1] = 2;
-  chunks->repetitions[chunks->chunk_starts[0]] = 2;
-  chunks->repetitions[chunks->chunk_starts[0] + 1] = 1;
-  chunks->repetitions[chunks->chunk_starts[1]] = 1;
-  chunks->repetitions[chunks->chunk_starts[1] + 1] = 0;
-  chunks->values[chunks->chunk_starts[0]] = 1;
-  chunks->values[chunks->chunk_starts[0] + 1] = 2;
-  chunks->values[chunks->chunk_starts[1]] = 255;
-  chunks->values[chunks->chunk_starts[1] + 1] = 124;
-  data.chunks = chunks;
-  write_rle_to_file(&data, file_name);
+  // struct rle_data data;
+  // data.total_data_length = 8;
+  // data.number_of_chunks = 2;
+  struct rle_data *data = make_host_rle_data(4);
+  data->repetitions[0] = 2;
+  data->repetitions[1] = 1;
+  data->repetitions[2] = 1;
+  data->repetitions[3] = 0;
+  data->values[0] = 1;
+  data->values[1] = 2;
+  data->values[2] = 255;
+  data->values[3] = 124;
+  data->total_data_length = 8;
+  data->compressed_array_length = 4;
+  write_rle_to_file(data, file_name);
   char true_file[40] = "test_data/reference_file.rle";
   test_file_equality(file_name, true_file);
 }
@@ -87,17 +84,14 @@ TEST(file_io, read_rle) {
   struct rle_data *data = read_rle_from_file(file_name);
   EXPECT_EQ(data->total_data_length, 8);
   EXPECT_EQ(data->compressed_array_length, 4);
-  EXPECT_EQ(data->number_of_chunks, 1);
-  EXPECT_EQ(data->chunks->chunk_lengths[0], 4);
-  EXPECT_EQ(data->chunks->chunk_starts[0], 0);
-  EXPECT_EQ(data->chunks->repetitions[0], 2);
-  EXPECT_EQ(data->chunks->repetitions[1], 1);
-  EXPECT_EQ(data->chunks->repetitions[2], 1);
-  EXPECT_EQ(data->chunks->repetitions[3], 0);
-  EXPECT_EQ(data->chunks->values[0], 1);
-  EXPECT_EQ(data->chunks->values[1], 2);
-  EXPECT_EQ(data->chunks->values[2], 255);
-  EXPECT_EQ(data->chunks->values[3], 124);
+  EXPECT_EQ(data->repetitions[0], 2);
+  EXPECT_EQ(data->repetitions[1], 1);
+  EXPECT_EQ(data->repetitions[2], 1);
+  EXPECT_EQ(data->repetitions[3], 0);
+  EXPECT_EQ(data->values[0], 1);
+  EXPECT_EQ(data->values[1], 2);
+  EXPECT_EQ(data->values[2], 255);
+  EXPECT_EQ(data->values[3], 124);
 }
 
 TEST(file_io, write_fle) {
