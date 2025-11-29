@@ -39,7 +39,8 @@ struct imgRawImage *loadJpegImageFile(char *lpFilename) {
 
   jpeg_start_decompress(&info);
   if (info.err->last_jpeg_message) {
-    info.err->emit_message(&info, info.err->last_jpeg_message);
+    info.err->emit_message((struct jpeg_common_struct *)&info,
+                           info.err->last_jpeg_message);
   }
   imgWidth = info.output_width;
   imgHeight = info.output_height;

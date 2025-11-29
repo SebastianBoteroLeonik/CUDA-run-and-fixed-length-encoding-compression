@@ -14,6 +14,8 @@ __global__ void validate_device_fle(struct fle_data *fle,
       dummy = fle->chunk_data[i][j];
     }
   }
+  // To turn off unused warning about dummy
+  number_of_chunks = dummy;
 }
 
 TEST(fle_utils, make_device_fle_data) {

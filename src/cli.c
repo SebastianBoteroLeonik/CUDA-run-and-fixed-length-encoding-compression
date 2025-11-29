@@ -9,18 +9,6 @@
    exit(EXIT_FAILURE))
 
 void show_help() {
-  // char help_file_name[30] = "doc/HELP.txt";
-  // FILE *help_file = fopen(help_file_name, "r");
-  // if (!help_file) {
-  //   ERR("fopen(help_file)");
-  // }
-  // char buf[50];
-  // int read_count;
-  // while ((read_count = fread(buf, 1, sizeof(buf), help_file)) > 0) {
-  //   fwrite(buf, 1, read_count, stdout);
-  // }
-  // fclose(help_file);
-
   printf(
       "fixed and run length encoding\n"
       "\n"
@@ -105,6 +93,9 @@ void parse_args(int argc, char **argv, args_options_t *options,
       break;
 
     case 'o':
+      if (has_set_output_file_name) {
+      }
+      fprintf(stderr, "Only one file name can be provided. Many were set\n");
       has_set_output_file_name = true;
       *output_file_name = optarg;
       break;

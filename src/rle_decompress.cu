@@ -36,8 +36,8 @@ __global__ void decompress_rle_kernel(char *uncompressed_data,
                                       unsigned int compressed_array_length) {
 
   const long long global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
-  const int id = threadIdx.x;
-  const int block_id = blockIdx.x;
+  // const int id = threadIdx.x;
+  // const int block_id = blockIdx.x;
   // const unsigned int block_length =
   //     blockDim.x * ((blockIdx.x + 1) * blockDim.x <= data_len) +
   //     (data_len % blockDim.x) * ((blockIdx.x + 1) * blockDim.x > data_len);

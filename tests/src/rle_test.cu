@@ -96,7 +96,7 @@ TEST(rle_common, partial_block_sum) {
   CUDA_ERROR_CHECK(cudaFree(dev_vals));
 }
 
-#define CEIL_DEV(num, div) ((num / div) + (num % div != 0))
+// #define CEIL_DEV(num, div) ((num / div) + (num % div != 0))
 
 TEST(run_length_encoding, find_diffs) {
   constexpr int len = 4000;
@@ -200,10 +200,12 @@ TEST(run_length_encoding, subtract_beginings) {
       dev_scan_array, dev_segment_ends, dev_overflows, dev_data, dev_vals, len);
   CUDA_ERROR_CHECK(cudaDeviceSynchronize());
   CUDA_ERROR_CHECK(cudaMemcpy(overflows, dev_overflows,
-                              sizeof(*overflows) * len,
+                              sizeof(*overflows) * acc,
                               cudaMemcpyDeviceToHost));
+  CUDA_ERROR_CHECK(
+      cudaMemcpy(vals, dev_vals, sizeof(*vals) * acc, cudaMemcpyDeviceToHost));
   CUDA_ERROR_CHECK(cudaMemcpy(segment_lengths, dev_segment_ends,
-                              sizeof(*segment_lengths) * len,
+                              sizeof(*segment_lengths) * acc,
                               cudaMemcpyDeviceToHost));
   CUDA_ERROR_CHECK(cudaFree(dev_scan_array));
   CUDA_ERROR_CHECK(cudaFree(dev_segment_ends));
@@ -215,6 +217,9 @@ TEST(run_length_encoding, subtract_beginings) {
   }
   for (int i = 0; i < acc; i++) {
     EXPECT_EQ(overflows[i], period / 256);
+  }
+  for (int i = 0; i < acc; i++) {
+    EXPECT_EQ(vals[i], i);
   }
 }
 
@@ -267,6 +272,8 @@ TEST(rle_utils, make_host_rle_chunk) {
     dummy = host_data->repetitions[i];
     dummy = host_data->values[i];
   }
+  // To turn off unused warning about dummy
+  capacity = dummy;
   free(host_data);
 }
 
