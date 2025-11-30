@@ -1,5 +1,5 @@
-#ifndef IMAGE_LOAD_H
 #define IMAGE_LOAD_H
+#ifndef IMAGE_LOAD_H
 
 typedef struct imgRawImage {
   unsigned int numComponents;

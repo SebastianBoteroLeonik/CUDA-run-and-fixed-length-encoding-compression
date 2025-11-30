@@ -1,17 +1,18 @@
 INCLUDEFLAGS=-I include
 
-CC=clang
+CC=gcc
 CFLAGS=-g -Wall $(INCLUDEFLAGS)
 # -fsanitize=address
 # LDFLAGS=-g -Wall
-LDLIBS=-lpthread -lm -ljpeg
+LDLIBS=-lpthread -lm
+#-ljpeg
 DEBUG=y
 ifeq ($(DEBUG),y)
 	DEBUGFLAGS=-D DEBUG
 endif
 
 NVCC=nvcc
-NVCCFLAGS=-O2 -arch=sm_89 -g -G $(DEBUGFLAGS) $(INCLUDEFLAGS)
+NVCCFLAGS=-O2 -arch=sm_80 -g -G $(DEBUGFLAGS) $(INCLUDEFLAGS)
 # -Xcompiler -fsanitize=address
 
 CFILES=$(wildcard src/*.c)

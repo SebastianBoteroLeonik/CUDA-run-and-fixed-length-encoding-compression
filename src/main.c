@@ -1,7 +1,7 @@
 #include "cli.h"
 #include "file_io.h"
 #include "fle.h"
-#include "load_images.h"
+// #include "load_images.h"
 #include "rle.h"
 #include <stdio.h>
 #include <stdlib.h>

@@ -1,3 +1,4 @@
+/*
 #include "load_images.h"
 
 #include <stdio.h>
@@ -52,7 +53,7 @@ struct imgRawImage *loadJpegImageFile(char *lpFilename) {
           __FILE__, __LINE__, imgWidth, imgHeight, numComponents);
 #endif
 
-  dwBufferBytes = imgWidth * imgHeight * 3; /* We only read RGB, not A */
+  dwBufferBytes = imgWidth * imgHeight * 3; // We only read RGB, not A
   lpData = (unsigned char *)malloc(sizeof(unsigned char) * dwBufferBytes);
   if (!lpData) {
     jpeg_finish_decompress(&info);
@@ -67,18 +68,18 @@ struct imgRawImage *loadJpegImageFile(char *lpFilename) {
   lpNewImage->height = imgHeight;
   lpNewImage->lpData = lpData;
 
-  /* Read scanline by scanline */
-  while (info.output_scanline < info.output_height) {
-    lpRowBuffer[0] = (unsigned char *)(&lpData[3 * info.output_width *
-                                               info.output_scanline]);
-    jpeg_read_scanlines(&info, lpRowBuffer, 1);
-  }
+  // Read scanline by scanline
+while (info.output_scanline < info.output_height) {
+  lpRowBuffer[0] =
+      (unsigned char *)(&lpData[3 * info.output_width * info.output_scanline]);
+  jpeg_read_scanlines(&info, lpRowBuffer, 1);
+}
 
-  jpeg_finish_decompress(&info);
-  jpeg_destroy_decompress(&info);
-  fclose(fHandle);
+jpeg_finish_decompress(&info);
+jpeg_destroy_decompress(&info);
+fclose(fHandle);
 
-  return lpNewImage;
+return lpNewImage;
 }
 
 #include <jerror.h>
@@ -116,16 +117,17 @@ int storeJpegImageFile(struct imgRawImage *lpImage, char *lpFilename) {
 
   jpeg_start_compress(&info, TRUE);
 
-  /* Write every scanline ... */
-  while (info.next_scanline < info.image_height) {
-    lpRowBuffer[0] =
-        &(lpImage->lpData[info.next_scanline * (lpImage->width * 3)]);
-    jpeg_write_scanlines(&info, lpRowBuffer, 1);
-  }
-
-  jpeg_finish_compress(&info);
-  fclose(fHandle);
-
-  jpeg_destroy_compress(&info);
-  return 0;
+  // Write every scanline ...
+while (info.next_scanline < info.image_height) {
+  lpRowBuffer[0] =
+      &(lpImage->lpData[info.next_scanline * (lpImage->width * 3)]);
+  jpeg_write_scanlines(&info, lpRowBuffer, 1);
 }
+
+jpeg_finish_compress(&info);
+fclose(fHandle);
+
+jpeg_destroy_compress(&info);
+return 0;
+}
+*/
