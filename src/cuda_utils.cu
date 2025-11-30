@@ -78,16 +78,19 @@ __global__ void down_propagate_cumsum(unsigned int *array,
   array[global_thread_id] += last_sums_in_chunks[blockIdx.x];
 }
 
-__host__ void recursive_cumsum(unsigned int *array, unsigned int array_len) {
+__host__ void recursive_cumsum(unsigned int *array, unsigned int array_len,
+                               cudaStream_t stream) {
   if (array_len <= 1) {
     return;
   }
   unsigned int next_arr_len = CEIL_DEV(array_len, BLOCK_SIZE);
   unsigned int *next_array;
-  CUDA_ERROR_CHECK(cudaMalloc(&next_array, next_arr_len * sizeof(*next_array)));
-  run_cumsum<<<next_arr_len, BLOCK_SIZE>>>(array, next_array, array_len);
-  recursive_cumsum(next_array, next_arr_len);
-  down_propagate_cumsum<<<next_arr_len - 1, BLOCK_SIZE>>>(array, next_array,
-                                                          array_len);
-  CUDA_ERROR_CHECK(cudaFree(next_array));
+  CUDA_ERROR_CHECK(
+      cudaMallocAsync(&next_array, next_arr_len * sizeof(*next_array), stream));
+  run_cumsum<<<next_arr_len, BLOCK_SIZE, 0, stream>>>(array, next_array,
+                                                      array_len);
+  recursive_cumsum(next_array, next_arr_len, stream);
+  down_propagate_cumsum<<<next_arr_len - 1, BLOCK_SIZE, 0, stream>>>(
+      array, next_array, array_len);
+  CUDA_ERROR_CHECK(cudaFreeAsync(next_array, stream));
 }

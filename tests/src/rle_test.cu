@@ -225,6 +225,7 @@ TEST(run_length_encoding, subtract_beginings) {
 
 TEST(run_length_encoding, compress_rle) {
   unsigned int TEST_DATA_LEN = (1 << 25);
+  // unsigned int TEST_DATA_LEN = (1 << 16);
   unsigned int PERIOD = 19;
   unsigned char *data = (unsigned char *)malloc(TEST_DATA_LEN);
   EXPECT_NE(data, nullptr);
@@ -257,13 +258,13 @@ TEST(run_length_encoding, compress_rle) {
   free(rle);
 }
 
-TEST(rle_utils, make_device_rle_chunk) {
+TEST(rle_utils, make_device_rle_data) {
   int capacity = 100;
   struct rle_data *dev_data = make_device_rle_data(capacity);
   CUDA_ERROR_CHECK(cudaFree(dev_data));
 }
 
-TEST(rle_utils, make_host_rle_chunk) {
+TEST(rle_utils, make_host_rle_data) {
   int capacity = 100;
   struct rle_data *host_data = make_host_rle_data(capacity);
   int dummy = host_data->compressed_array_length;
@@ -288,8 +289,6 @@ __global__ void run_cumsum(unsigned int *array,
 __global__ void down_propagate_cumsum(unsigned int *array,
                                       unsigned int *last_sums_in_chunks,
                                       unsigned int array_length);
-
-__host__ void recursive_cumsum(unsigned int *array, unsigned int array_len);
 
 TEST(rle_decoding, char_to_llong) {
   size_t SIZE = 2000;

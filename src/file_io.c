@@ -80,6 +80,7 @@ struct rle_data *read_rle_from_file(char *file_name) {
   if (rc != 1)
     ERR("fread compressed_array_length");
   struct rle_data *data = make_host_rle_data(compressed_array_length);
+  data->compressed_array_length = compressed_array_length;
   data->total_data_length = total_data_length;
   rc = fread(data->repetitions, sizeof(*data->repetitions),
              data->compressed_array_length, fileptr);
