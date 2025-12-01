@@ -31,9 +31,17 @@ EXECNAME=bin/frle
 all: $(CDEP) $(CUDADEP) build
 
 .PHONY: clean all check build
+
+clean-all: clean clean-lib clean-tests
+
 clean:
 	-rm -r build/ bin/ dependencies/ tests/build/ tests/test tests/test_outputs
+
+clean-lib:
 	cd lib && $(MAKE) clean
+
+clean-tests:
+	cd tests/end_to_end_tests && $(MAKE) clean
 
 dependencies/%.d: src/%.c Makefile
 	mkdir -p dependencies
@@ -83,6 +91,8 @@ tests/test: $(OBJ) $(TESTOBJ) libs
 		$(GTESTLIB) \
 		-o tests/test
 
-check: tests/test
+check: tests/test build
 	mkdir -p tests/test_outputs
 	cd tests && ./test
+	echo running end to end tests silently
+	cd tests/end_to_end_tests && $(MAKE) check

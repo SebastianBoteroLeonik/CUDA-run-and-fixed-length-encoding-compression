@@ -94,8 +94,8 @@ void parse_args(int argc, char **argv, args_options_t *options,
 
     case 'o':
       if (has_set_output_file_name) {
+        fprintf(stderr, "Only one file name can be provided. Many were set\n");
       }
-      fprintf(stderr, "Only one file name can be provided. Many were set\n");
       has_set_output_file_name = true;
       *output_file_name = optarg;
       break;
