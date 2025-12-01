@@ -3,9 +3,6 @@
 #include "fle.h"
 #include "rle.h"
 
-#define BLOCK_SIZE 1024
-#define CEIL_DEV(num, div) (((num) / (div)) + ((num) % (div) != 0))
-
 void write_binary_file(char *file_name, unsigned char *data, size_t data_len);
 unsigned char *read_binary_file(char *file_name, int *data_len);
 

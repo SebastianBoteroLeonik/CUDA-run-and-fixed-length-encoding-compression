@@ -1,5 +1,6 @@
 #ifndef RLE_H
 #define RLE_H
+#include "define.h"
 #include <stdio.h>
 
 // struct rle_chunks {

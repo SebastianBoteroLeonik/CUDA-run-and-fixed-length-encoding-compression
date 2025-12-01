@@ -2,7 +2,6 @@
 #include "rle.h"
 #include <cstddef>
 #include <gtest/gtest.h>
-#include <rle_tests.h>
 
 __global__ void run_warp_cumsum(int *vals) {
   vals[threadIdx.x] = warp_cumsum(vals[threadIdx.x], 0xffffffff);
@@ -50,7 +49,6 @@ TEST(rle_common, warp_sum) {
   CUDA_ERROR_CHECK(cudaFree(dev_vals));
 }
 
-#define BLOCK_SIZE 1024
 TEST(rle_common, block_sum) {
   int vals[BLOCK_SIZE];
   for (int i = 0; i < BLOCK_SIZE; i++) {
@@ -95,8 +93,6 @@ TEST(rle_common, partial_block_sum) {
   }
   CUDA_ERROR_CHECK(cudaFree(dev_vals));
 }
-
-// #define CEIL_DEV(num, div) ((num / div) + (num % div != 0))
 
 TEST(run_length_encoding, find_diffs) {
   constexpr int len = 4000;

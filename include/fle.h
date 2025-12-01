@@ -1,5 +1,6 @@
 #ifndef FLE_H
 #define FLE_H
+#include "define.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
