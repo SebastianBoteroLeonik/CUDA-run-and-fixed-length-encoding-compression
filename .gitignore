@@ -7,3 +7,6 @@ dependencies/
 tests/test
 tests/build
 tests/test_outputs
+lib/*.tar.gz
+lib/googletest-1.17.0
+lib/usr/local

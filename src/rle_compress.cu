@@ -248,12 +248,12 @@ void *compressor_thread(void *vptr) {
       pthread_cond_broadcast(&shared_data->compression_cond);
     }
     pthread_mutex_unlock(&shared_data->compression_mtx);
-    fprintf(stderr,
-            "processed %d bytes out of %lu; this step was %d bytes "
-            "long\n"
-            "all_copied: %d\nall_compressed: %d\n",
-            processed_bytes, shared_data->data_len, step_size, all_copied,
-            shared_data->all_compressed);
+    // fprintf(stderr,
+    //         "processed %d bytes out of %lu; this step was %d bytes "
+    //         "long\n"
+    //         "all_copied: %d\nall_compressed: %d\n",
+    //         processed_bytes, shared_data->data_len, step_size, all_copied,
+    //         shared_data->all_compressed);
     cudaFree(overflows);
     cudaFree(values);
     cudaFree(og_lengths);
@@ -270,7 +270,7 @@ void *rle_copier_thread(void *vptr) {
   struct rle_data *dev_rle;
   int dev_compressed_len;
   int host_compressed_len = 0;
-  bool all_compressed = false;
+  // bool all_compressed = false;
   pthread_mutex_lock(&shared_data->compression_mtx);
   if (!shared_data->all_compressed) {
     pthread_cond_wait(&shared_data->compression_cond,
@@ -285,14 +285,14 @@ void *rle_copier_thread(void *vptr) {
     struct rle_data_list_node *next_list_node = list_node->next;
     free(list_node);
     list_node = next_list_node;
-    if (list_node) {
-      fprintf(stderr, "more\n");
-    } else {
-      fprintf(stderr, "end\n");
-    }
-    fprintf(stderr, "host_compressed_len: %d\n", host_compressed_len);
-    fprintf(stderr, "comp_tot_len: %d\n", shared_data->compressed_len_total);
-    fprintf(stderr, "chunk_len: %d\n", dev_compressed_len);
+    // if (list_node) {
+    //   fprintf(stderr, "more\n");
+    // } else {
+    //   fprintf(stderr, "end\n");
+    // }
+    // fprintf(stderr, "host_compressed_len: %d\n", host_compressed_len);
+    // fprintf(stderr, "comp_tot_len: %d\n", shared_data->compressed_len_total);
+    // fprintf(stderr, "chunk_len: %d\n", dev_compressed_len);
     // verify_dev_rle<<<1, 2>>>(dev_rle, 0);
     // if (shared_data->host_rle->repetitions == shared_data->host_rle->values)
     // {

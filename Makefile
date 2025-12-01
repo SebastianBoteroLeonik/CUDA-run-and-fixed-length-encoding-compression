@@ -12,7 +12,7 @@ ifeq ($(DEBUG),y)
 endif
 
 NVCC=nvcc
-NVCCFLAGS=-O2 -arch=sm_80 -g -G $(DEBUGFLAGS) $(INCLUDEFLAGS)
+NVCCFLAGS=-O2 -arch=sm_80 -g -G $(DEBUGFLAGS) $(INCLUDEFLAGS) --std c++17
 # -Xcompiler -fsanitize=address
 
 CFILES=$(wildcard src/*.c)
@@ -33,6 +33,7 @@ all: $(CDEP) $(CUDADEP) build
 .PHONY: clean all check build
 clean:
 	-rm -r build/ bin/ dependencies/ tests/build/ tests/test tests/test_outputs
+	cd lib && $(MAKE) clean
 
 dependencies/%.d: src/%.c Makefile
 	mkdir -p dependencies
@@ -57,19 +58,30 @@ build: $(OBJ)
 run: build
 	./$(EXECNAME)
 
-CPPFLAGS=$(shell pkg-config gtest_main --cflags --libs) -I tests/include
-LDLIBS+=$(shell pkg-config gtest_main --libs --cflags) -ljpeg -lgtest_main
+# CPPFLAGS=$(shell pkg-config gtest_main --cflags --libs) 
+# CPPFLAGS=-L./lib/usr/local/lib -I ./lib/usr/local/include -I tests/include -DGTEST_HAS_PTHREAD=1 
+#-lgtest_main -lgtest
+# LDLIBS+=$(shell pkg-config gtest_main --libs --cflags) -ljpeg -lgtest_main
 # tests/build/%.o:NVCCFLAGS+=-I src
-tests/build/%.o:: tests/src/%.cu
-	mkdir -p tests/build
-	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) -dc $< -o $@
-tests/build/%.o:: tests/src/%.cpp
-	mkdir -p tests/build
-	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) -c $< -o $@
+TESTFLAGS=-I tests/include -I lib/usr/local/include
+GTESTLIB=lib/usr/local/lib/libgtest.a lib/usr/local/lib/libgtest_main.a
 
-tests/test: $(OBJ) $(TESTOBJ)
+libs:
+	cd lib && $(MAKE)
+
+tests/build/%.o:: tests/src/%.cu libs
+	mkdir -p tests/build
+	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) $(TESTFLAGS) -dc $< -o $@
+tests/build/%.o:: tests/src/%.cpp libs
+	mkdir -p tests/build
+	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) $(TESTFLAGS) -c $< -o $@
+
+tests/test: $(OBJ) $(TESTOBJ) libs
 	echo $(TESTOBJ)
-	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) $(LDLIBS) $(TESTOBJ) $(filter-out build/main.o, $(OBJ)) -o tests/test
+	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) $(LDLIBS) $(TESTOBJ) $(TESTFLAGS) \
+		$(filter-out build/main.o, $(OBJ)) \
+		$(GTESTLIB) \
+		-o tests/test
 
 check: tests/test
 	mkdir -p tests/test_outputs
