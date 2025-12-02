@@ -28,7 +28,7 @@ CUDADEP=$(patsubst src/%.cu,dependencies/%.du,$(CUDAFILES))
 TESTS=$(wildcard tests/src/*)
 TESTOBJ=$(patsubst tests/src/%.cu,tests/build/%.o,$(patsubst tests/src/%.cpp,tests/build/%.o,$(TESTS)))
 
-EXECNAME=bin/frle
+EXECNAME=bin/compress
 
 all: $(CDEP) $(CUDADEP) build
 

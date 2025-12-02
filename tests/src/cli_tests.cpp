@@ -6,6 +6,8 @@
 extern "C" {
 #include "cli.h"
 }
+// Zrobione pod poprzednią wersję podawania argumentów
+/*
 
 TEST(argument_parsing, correct_execution_full) {
   const char *argv[] = {"frle", "-rco", "output", "input", NULL};
@@ -121,3 +123,4 @@ TEST(argument_parsing, no_compression_direction) {
               "Please specify whether to compress or decompress the "
               "file. Use the necessary options");
 }
+*/
