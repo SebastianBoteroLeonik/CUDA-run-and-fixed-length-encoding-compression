@@ -1,8 +1,5 @@
-
 #include "cuda_utils.cuh"
 #include "fle.h"
-#include <cuda.h>
-#include <device_launch_parameters.h>
 
 __global__ void fle_decompress_kernel(struct fle_data *fle,
                                       unsigned char *binary_data) {
@@ -16,7 +13,6 @@ __global__ void fle_decompress_kernel(struct fle_data *fle,
   unsigned char bits_necessary = fle->chunk_element_size[block_id];
   int bit_index = bits_necessary * id;
   bool does_overflow = (bit_index % 8 + bits_necessary > 8);
-  // does_overflow = false;
   constexpr unsigned char full_mask = 0xff;
   unsigned char mask = full_mask;
   mask <<= 8 - bits_necessary;
@@ -25,7 +21,6 @@ __global__ void fle_decompress_kernel(struct fle_data *fle,
   masked <<= bit_index % 8;
   masked >>= 8 - bits_necessary;
   char decoded_byte = 0;
-  // binary_data[global_thread_id] = 0;
   decoded_byte |= masked;
   if (does_overflow) {
     mask = full_mask;
@@ -55,7 +50,6 @@ __host__ unsigned char *fle_decompress(struct fle_data *compressed) {
           compressed->chunk_element_size[chunk_number];
       int bit_index = bits_necessary * id;
       bool does_overflow = (bit_index % 8 + bits_necessary > 8);
-      // does_overflow = false;
       constexpr unsigned char full_mask = 0xff;
       unsigned char mask = full_mask;
       mask <<= 8 - bits_necessary;
@@ -65,7 +59,6 @@ __host__ unsigned char *fle_decompress(struct fle_data *compressed) {
       masked <<= bit_index % 8;
       masked >>= 8 - bits_necessary;
       char decoded_byte = 0;
-      // binary_data[global_thread_id] = 0;
       decoded_byte |= masked;
       if (does_overflow) {
         mask = full_mask;
@@ -93,11 +86,13 @@ __host__ unsigned char *fle_decompress(struct fle_data *compressed) {
   struct fle_data *dev_fle = make_device_fle_data(compressed->number_of_chunks);
   CUDA_PERFORMANCE_CHECKPOINT(before_fle_memcopy)
   copy_fle_data(compressed, dev_fle, HostToDevice);
+  printf("Copied data onto gpu\n");
   CUDA_PERFORMANCE_CHECKPOINT(before_kernel)
   fle_decompress_kernel<<<compressed->number_of_chunks, BLOCK_SIZE>>>(
       dev_fle, dev_binary_data);
   CUDA_PERFORMANCE_CHECKPOINT(after_kernel)
   CUDA_ERROR_CHECK(cudaDeviceSynchronize());
+  printf("Decompressed\n");
   unsigned char *binary_data =
       (unsigned char *)malloc(compressed->total_data_length);
   CUDA_ERROR_CHECK(cudaFree(dev_fle));
@@ -105,6 +100,7 @@ __host__ unsigned char *fle_decompress(struct fle_data *compressed) {
   CUDA_ERROR_CHECK(cudaMemcpy(binary_data, dev_binary_data,
                               compressed->total_data_length,
                               cudaMemcpyDeviceToHost));
+  printf("Copied data onto cpu\n");
   CUDA_PERFORMANCE_CHECKPOINT(after_binary_memcpy)
   CUDA_ERROR_CHECK(cudaFree(dev_binary_data));
   PRINT_AND_TERMINATE_CUDA_PERFORMANCE_CHECK()

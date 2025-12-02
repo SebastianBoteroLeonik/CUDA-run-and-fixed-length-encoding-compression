@@ -35,5 +35,19 @@ void parse_args(int argc, char **argv, args_options_t *options,
     *options |= USE_FLE;
   }
   *input_file_name = argv[3];
+  FILE *fptr = fopen(*input_file_name, "r");
+  if (!fptr) {
+    fprintf(stderr, "Could not open input file - please make sure the file "
+                    "exists and is readable\n");
+    ERR("fopen");
+  }
+  fclose(fptr);
   *output_file_name = argv[4];
+  fptr = fopen(*output_file_name, "w");
+  if (!fptr) {
+    fprintf(stderr, "Could not open output file - please make sure the file "
+                    "exists and is writable\n");
+    ERR("fopen");
+  }
+  fclose(fptr);
 }

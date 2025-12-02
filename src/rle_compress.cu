@@ -57,6 +57,8 @@ __global__ void subtract_segment_begining(unsigned int *scan_result,
   }
 }
 
+// function for populating struct rle_data based on the previously calculated
+// arrays
 __global__ void write_rle(unsigned char *values, unsigned int *og_lengths,
                           unsigned int *overflows, struct rle_data *rle,
                           unsigned int len) {
@@ -119,6 +121,7 @@ __host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
 
 #else
 
+// A not very successful experiment with streams
 #ifdef STREAMS
 
 struct rle_data_list_node {
@@ -178,6 +181,7 @@ void *binary_copier_thread(void *vptr) {
   }
 
   CUDA_ERROR_CHECK(cudaStreamDestroy(stream));
+  printf("Copied data onto gpu\n");
   return NULL;
 }
 
@@ -252,7 +256,6 @@ void *compressor_thread(void *vptr) {
     new_node->compressed_len = compressed_len + last_overflow;
     CUDA_ERROR_CHECK(cudaStreamSynchronize(stream));
     CUDA_ERROR_CHECK(cudaDeviceSynchronize());
-    // verify_dev_rle<<<1, 2>>>(dev_rle, 0);
     processed_bytes += step_size;
     pthread_mutex_lock(&shared_data->compression_mtx);
     if (!shared_data->compressed_head) {
@@ -276,13 +279,13 @@ void *compressor_thread(void *vptr) {
   CUDA_ERROR_CHECK(cudaStreamDestroy(stream));
   CUDA_ERROR_CHECK(cudaFree(scan_array));
   CUDA_ERROR_CHECK(cudaFree(shared_data->dev_data));
+  printf("Compressed\n");
   return NULL;
 }
 
 void *rle_copier_thread(void *vptr) {
   struct pthread_shared_data *shared_data = (struct pthread_shared_data *)vptr;
   cudaStream_t stream;
-  CUDA_ERROR_CHECK(cudaStreamCreate(&stream));
   struct rle_data *dev_rle;
   int dev_compressed_len;
   int host_compressed_len = 0;
@@ -316,7 +319,7 @@ void *rle_copier_thread(void *vptr) {
   shared_data->host_rle->compressed_array_length = host_compressed_len;
   shared_data->host_rle->total_data_length = shared_data->data_len;
 
-  CUDA_ERROR_CHECK(cudaStreamDestroy(stream));
+  printf("Copied data onto cpu\n");
   return NULL;
 }
 
@@ -358,6 +361,7 @@ __host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
   CUDA_PERFORMANCE_CHECKPOINT(binary_data_memcpy)
   CUDA_ERROR_CHECK(cudaMemcpy(dev_data, data, sizeof(*data) * data_len,
                               cudaMemcpyHostToDevice));
+  printf("Copied data onto gpu\n");
 
   CUDA_PERFORMANCE_CHECKPOINT(malloc_scan_array)
   unsigned int *scan_array;
@@ -402,6 +406,7 @@ __host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
   CUDA_PERFORMANCE_CHECKPOINT(write_rle)
   write_rle<<<number_of_blocks, BLOCK_SIZE>>>(values, og_lengths, overflows,
                                               dev_rle, compressed_len);
+  printf("Compressed\n");
   CUDA_PERFORMANCE_CHECKPOINT(after_write_rle)
   CUDA_ERROR_CHECK(cudaDeviceSynchronize());
   struct rle_data *out_rle = make_host_rle_data(compressed_len + last_overflow);
@@ -409,6 +414,7 @@ __host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
   CUDA_PERFORMANCE_CHECKPOINT(before_rle_copy)
   copy_rle_data(dev_rle, out_rle, DeviceToHost, compressed_len + last_overflow);
 
+  printf("Copied data onto cpu\n");
   CUDA_PERFORMANCE_CHECKPOINT(after_rle_copy)
   CUDA_ERROR_CHECK(cudaFree(dev_rle));
   CUDA_ERROR_CHECK(cudaFree(og_lengths));

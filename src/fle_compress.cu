@@ -24,8 +24,6 @@ __global__ void fle_compress_kernel(struct fle_data *fle,
   }
   this_byte <<= (8 - bits_necessary);
   int bit_index = bits_necessary * id;
-  // bool does_overflow = ((bit_index / 8) != ((bit_index + bits_necessary) /
-  // 8));
   bool does_overflow = (bit_index % 8 + bits_necessary > 8);
   // clear array
   fle->chunk_data[block_id][id] = 0;
@@ -70,8 +68,6 @@ __host__ struct fle_data *fle_compress(unsigned char *binary_data,
       unsigned char this_byte = binary_data[chunk_number * BLOCK_SIZE + i];
       this_byte <<= (8 - bits_needed);
       int bit_index = bits_needed * i;
-      // bool does_overflow = ((bit_index / 8) != ((bit_index + bits_necessary)
-      // / 8));
       bool does_overflow = (bit_index % 8 + bits_needed > 8);
       // clear array
       output->chunk_data[chunk_number][i] = 0;
@@ -93,30 +89,46 @@ __host__ struct fle_data *fle_compress(unsigned char *binary_data,
                                        unsigned long data_length) {
 
   INITIALIZE_CUDA_PERFORMANCE_CHECK(7)
+
   int number_of_chunks = CEIL_DEV(data_length, BLOCK_SIZE);
 
   CUDA_PERFORMANCE_CHECKPOINT(before_fle_allocation)
+
   struct fle_data *output = make_host_fle_data(number_of_chunks);
   struct fle_data *dev_fle = make_device_fle_data(number_of_chunks);
 
   CUDA_PERFORMANCE_CHECKPOINT(before_binary_allocation)
+
   unsigned char *dev_binary_data;
   CUDA_ERROR_CHECK(cudaMalloc(&dev_binary_data, data_length));
+
   CUDA_PERFORMANCE_CHECKPOINT(before_binary_memcpy)
+
   CUDA_ERROR_CHECK(cudaMemcpy(dev_binary_data, binary_data, data_length,
                               cudaMemcpyHostToDevice));
+  printf("Copied data onto gpu\n");
+
   CUDA_PERFORMANCE_CHECKPOINT(before_kernel)
 
   fle_compress_kernel<<<number_of_chunks, BLOCK_SIZE>>>(
       dev_fle, dev_binary_data, data_length);
+
   CUDA_PERFORMANCE_CHECKPOINT(after_kernel)
+
   CUDA_ERROR_CHECK(cudaDeviceSynchronize());
+  printf("Compressed\n");
   CUDA_ERROR_CHECK(cudaFree(dev_binary_data));
+
   CUDA_PERFORMANCE_CHECKPOINT(before_fle_copy)
+
   copy_fle_data(dev_fle, output, DeviceToHost);
+  printf("Copied data onto cpu\n");
+
   CUDA_PERFORMANCE_CHECKPOINT(after_fle_copy)
+
   CUDA_ERROR_CHECK(cudaFree(dev_fle));
   output->total_data_length = data_length;
+
   PRINT_AND_TERMINATE_CUDA_PERFORMANCE_CHECK()
 
   return output;

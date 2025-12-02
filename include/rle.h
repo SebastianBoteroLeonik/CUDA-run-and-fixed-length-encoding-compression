@@ -3,9 +3,8 @@
 #include "define.h"
 #include <stdio.h>
 
-/***
+/*
  Main data structure for run length encoding
- @field aslnlasdn
  */
 struct rle_data {
   unsigned int
@@ -37,16 +36,14 @@ struct rle_data *make_host_rle_data(unsigned int capacity);
 enum cpyKind { HostToDevice, HostToHost, DeviceToHost };
 #endif // !CPYKIND
 
-/**
- * A function to copy struct rle_data between devices
- * @param src - ads
+/*
+ A function to copy struct rle_data between devices
  */
 void copy_rle_data(struct rle_data *src, struct rle_data *dst,
                    enum cpyKind kind, unsigned capacity);
 
-/***
+/*
  The compression function for rle.
- @param data -
  */
 struct rle_data *compress_rle(unsigned char *data, size_t data_len);
 

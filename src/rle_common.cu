@@ -19,15 +19,6 @@ __host__ struct rle_data *make_device_rle_data(unsigned int capacity) {
                               cudaMemcpyHostToDevice));
   CUDA_ERROR_CHECK(cudaMemcpy(&(data->compressed_array_length), &capacity,
                               sizeof(capacity), cudaMemcpyHostToDevice));
-  // arena += sizeof(data->chunk_starts[0]) * number_of_data;
-  // CUDA_ERROR_CHECK(cudaMemcpy(&(data->chunk_lengths), &arena, sizeof(arena),
-  //                             cudaMemcpyHostToDevice));
-  // arena += sizeof(data->chunk_lengths[0]) * number_of_data;
-  // CUDA_ERROR_CHECK(cudaMemcpy(&(data->repetitions), &arena, sizeof(arena),
-  //                             cudaMemcpyHostToDevice));
-  // arena += sizeof(data->repetitions[0]) * number_of_data * chunk_capacity;
-  // CUDA_ERROR_CHECK(cudaMemcpy(&(data->values), &arena, sizeof(arena),
-  //                             cudaMemcpyHostToDevice));
   return data;
 }
 
@@ -42,13 +33,6 @@ __host__ struct rle_data *make_host_rle_data(unsigned int capacity) {
   arena = arena + sizeof(*data->repetitions) * capacity;
   data->values = arena;
   data->compressed_array_length = capacity;
-  // data->chunk_starts = (unsigned long *)arena;
-  // arena = arena + sizeof(data->chunk_starts[0]) * number_of_data;
-  // data->chunk_lengths = (unsigned int *)arena;
-  // arena += sizeof(data->chunk_lengths[0]) * number_of_chunks;
-  // data->repetitions = arena;
-  // arena += sizeof(data->repetitions[0]) * number_of_chunks * chunk_capacity;
-  // data->values = arena;
 
   return data;
 }
@@ -75,6 +59,8 @@ __host__ void copy_rle_data(struct rle_data *src, struct rle_data *dst,
   CUDA_ERROR_CHECK(cudaMemcpy(&(dst->compressed_array_length),
                               &src->compressed_array_length,
                               sizeof(src->compressed_array_length), cudakind));
+
+  // Getting access to the values of pointers that are on device
   if (cudakind == cudaMemcpyDeviceToHost ||
       cudakind == cudaMemcpyDeviceToDevice) {
     struct rle_data dummy;

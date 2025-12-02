@@ -36,11 +36,6 @@ __global__ void decompress_rle_kernel(char *uncompressed_data,
                                       unsigned int compressed_array_length) {
 
   const unsigned int global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
-  // const int id = threadIdx.x;
-  // const int block_id = blockIdx.x;
-  // const unsigned int block_length =
-  //     blockDim.x * ((blockIdx.x + 1) * blockDim.x <= data_len) +
-  //     (data_len % blockDim.x) * ((blockIdx.x + 1) * blockDim.x > data_len);
   if (global_thread_id >= compressed_array_length) {
     return;
   }
@@ -129,6 +124,7 @@ __host__ unsigned char *decompress_rle(struct rle_data *compressed_data) {
   CUDA_PERFORMANCE_CHECKPOINT(before_rle_copy)
   copy_rle_data(compressed_data, dev_rle, HostToDevice,
                 compressed_data->compressed_array_length);
+  printf("Copied data onto gpu\n");
   unsigned int *repetitions_cumsums;
   CUDA_PERFORMANCE_CHECKPOINT(cumsum_repetitions)
   cumsum_repetitions(&repetitions_cumsums, dev_rle,
@@ -144,9 +140,11 @@ __host__ unsigned char *decompress_rle(struct rle_data *compressed_data) {
   CUDA_ERROR_CHECK(cudaFree(dev_rle));
   CUDA_ERROR_CHECK(cudaFree(repetitions_cumsums));
   CUDA_PERFORMANCE_CHECKPOINT(before_binary_memcpy)
+  printf("Decompressed\n");
   CUDA_ERROR_CHECK(cudaMemcpy(uncompressed_data, dev_uncompressed_data,
                               compressed_data->total_data_length,
                               cudaMemcpyDeviceToHost));
+  printf("Copied data onto cpu\n");
   CUDA_PERFORMANCE_CHECKPOINT(after_binary_memcpy)
 
   CUDA_ERROR_CHECK(cudaFree(dev_uncompressed_data));

@@ -3,13 +3,17 @@
 #include "define.h"
 #define WARP_SIZE 32
 
+// A scan inside of a warp. Uses shuffles
 __device__ int warp_cumsum(int val, unsigned int mask);
 
+// A blockwise scan. Uses the above function
 __device__ int block_cumsum(int val);
 
+// A recursive implementation of scan using the above functions
 __host__ void recursive_cumsum(unsigned int *array, unsigned int array_len,
                                cudaStream_t stream = 0);
 
+// Macro for checking and displaying cuda errors
 #define CUDA_ERROR_CHECK(expr)                                                 \
   do {                                                                         \
     cudaError_t cudaStatus = expr;                                             \
@@ -21,6 +25,7 @@ __host__ void recursive_cumsum(unsigned int *array, unsigned int array_len,
     }                                                                          \
   } while (0)
 
+// Macros for some VERY simple performance monitoring using cudaEvent_t
 #ifdef PERFORMANCE_TEST
 
 #define INITIALIZE_CUDA_PERFORMANCE_CHECK(capacity)                            \

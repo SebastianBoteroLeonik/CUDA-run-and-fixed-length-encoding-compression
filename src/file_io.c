@@ -64,7 +64,6 @@ void write_rle_to_file(struct rle_data *data, char *file_name) {
 }
 
 struct rle_data *read_rle_from_file(char *file_name) {
-  // struct rle_data *data = (struct rle_data *)malloc(sizeof(struct rle_data));
   FILE *fileptr = fopen(file_name, "rb");
   if (!fileptr) {
     ERR("fopen");
@@ -106,15 +105,11 @@ void write_fle_to_file(struct fle_data *data, char *file_name) {
               fileptr);
   if (wc != 1)
     ERR("fwrite total_data_length");
-  // printf("data->total_data_length = %lu\n", data->total_data_length);
-  // printf("data->total_data_length = %p\n", &data->total_data_length);
 
   wc = fwrite(&(data->number_of_chunks), sizeof(data->number_of_chunks), 1,
               fileptr);
   if (wc != 1)
     ERR("fwrite number_of_chunks");
-  // printf("data->number_of_chunks = %lu\n", data->number_of_chunks);
-  // printf("data->number_of_chunks = %p\n", &data->number_of_chunks);
 
   wc = fwrite(data->chunk_element_size, sizeof(*data->chunk_element_size),
               data->number_of_chunks, fileptr);
@@ -127,7 +122,6 @@ void write_fle_to_file(struct fle_data *data, char *file_name) {
       full_len = data->total_data_length % BLOCK_SIZE;
     }
     int chunk_len = CEIL_DEV((data->chunk_element_size[i] * full_len), 8);
-    // printf("chunk_len = %d\n", chunk_len);
     wc = fwrite(data->chunk_data[i], sizeof(*data->chunk_data[i]), chunk_len,
                 fileptr);
     if (wc != chunk_len)
