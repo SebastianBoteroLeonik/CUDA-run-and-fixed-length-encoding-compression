@@ -25,6 +25,8 @@ int main(int argc, char *argv[]) {
       struct fle_data *fle = read_fle_from_file(input_file_name);
       unsigned char *binary_data = fle_decompress(fle);
       write_binary_file(output_file_name, binary_data, fle->total_data_length);
+      free(fle);
+      free(binary_data);
     } else {
       if (!output_file_name) {
         output_file_name = "output.fle";
@@ -36,6 +38,8 @@ int main(int argc, char *argv[]) {
       // printf("data_length = %d\n", data_length);
       struct fle_data *fle = fle_compress(binary_data, data_length);
       write_fle_to_file(fle, output_file_name);
+      free(fle);
+      free(binary_data);
     }
   } else {
     if (options & DECOMPRESS) {
@@ -46,6 +50,8 @@ int main(int argc, char *argv[]) {
       struct rle_data *rle = read_rle_from_file(input_file_name);
       unsigned char *binary_data = decompress_rle(rle);
       write_binary_file(output_file_name, binary_data, rle->total_data_length);
+      free(rle);
+      free(binary_data);
     } else {
       if (!output_file_name) {
         output_file_name = "output.rle";
@@ -57,6 +63,8 @@ int main(int argc, char *argv[]) {
       // printf("data_length = %d\n", data_length);
       struct rle_data *rle = compress_rle(binary_data, data_length);
       write_rle_to_file(rle, output_file_name);
+      free(rle);
+      free(binary_data);
       // printf("%d\n", rle->compressed_array_length);
     }
   }

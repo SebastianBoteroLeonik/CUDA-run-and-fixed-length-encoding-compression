@@ -21,8 +21,6 @@ __host__ void recursive_cumsum(unsigned int *array, unsigned int array_len,
     }                                                                          \
   } while (0)
 
-#define PERFORMANCE_TEST
-
 #ifdef PERFORMANCE_TEST
 
 #define INITIALIZE_CUDA_PERFORMANCE_CHECK(capacity)                            \

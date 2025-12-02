@@ -1,18 +1,20 @@
 INCLUDEFLAGS=-I include
 
+DEFINE=
+
 CC=gcc
-CFLAGS=-g -Wall $(INCLUDEFLAGS)
+CFLAGS=-g -Wall $(INCLUDEFLAGS) $(DEFINE)
 # -fsanitize=address
 # LDFLAGS=-g -Wall
 LDLIBS=-lpthread -lm
 #-ljpeg
-DEBUG=y
-ifeq ($(DEBUG),y)
-	DEBUGFLAGS=-D DEBUG
-endif
+# DEBUG=y
+# ifeq ($(DEBUG),y)
+# 	DEBUGFLAGS=-D DEBUG
+# endif
 
 NVCC=nvcc
-NVCCFLAGS=-O2 -arch=sm_80 -g -G $(DEBUGFLAGS) $(INCLUDEFLAGS) --std c++17
+NVCCFLAGS=-O2 -arch=sm_80 -g -G $(INCLUDEFLAGS) --std c++17 $(DEFINE)
 # -Xcompiler -fsanitize=address
 
 CFILES=$(wildcard src/*.c)

@@ -1,6 +1,4 @@
 #include "cuda_utils.cuh"
-#include <cuda.h>
-#include <device_launch_parameters.h>
 #include <stdio.h>
 
 /* A function to be run warpwise.
@@ -90,7 +88,10 @@ __host__ void recursive_cumsum(unsigned int *array, unsigned int array_len,
   run_cumsum<<<next_arr_len, block_size, 0, stream>>>(array, next_array,
                                                       array_len);
   recursive_cumsum(next_array, next_arr_len, stream);
-  down_propagate_cumsum<<<next_arr_len - 1, block_size, 0, stream>>>(
-      array, next_array, array_len);
+  if (next_arr_len > 1) {
+    down_propagate_cumsum<<<next_arr_len - 1, block_size, 0, stream>>>(
+        array, next_array, array_len);
+  }
+  CUDA_ERROR_CHECK(cudaStreamSynchronize(stream));
   CUDA_ERROR_CHECK(cudaFree(next_array));
 }

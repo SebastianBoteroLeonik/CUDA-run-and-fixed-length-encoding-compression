@@ -11,6 +11,9 @@ __global__ void fle_compress_kernel(struct fle_data *fle,
   const int id = threadIdx.x;
   const int block_id = blockIdx.x;
   unsigned char bits_necessary = 8;
+  if (global_thread_id >= data_length) {
+    return;
+  }
   unsigned char this_byte = binary_data[global_thread_id];
   while (bits_necessary > 0 &&
          !__syncthreads_or(this_byte & (0b1 << (bits_necessary - 1)))) {
@@ -39,6 +42,52 @@ __global__ void fle_compress_kernel(struct fle_data *fle,
     }
   }
 }
+
+#ifdef CPU
+
+__host__ struct fle_data *fle_compress(unsigned char *binary_data,
+                                       unsigned long data_length) {
+
+  int chunk_len = BLOCK_SIZE;
+  int number_of_chunks = CEIL_DEV(data_length, BLOCK_SIZE);
+  struct fle_data *output = make_host_fle_data(number_of_chunks);
+  output->total_data_length = data_length;
+  output->number_of_chunks = number_of_chunks;
+  for (int chunk_number = 0; chunk_number < number_of_chunks; chunk_number++) {
+    if ((chunk_number + 1) * BLOCK_SIZE > data_length) {
+      chunk_len = data_length % BLOCK_SIZE;
+    }
+    char bits_needed = 0;
+    unsigned char mask = 0xff;
+    for (int i = 0; i < chunk_len && bits_needed < 8; i++) {
+      while ((mask << bits_needed) &
+             binary_data[chunk_number * BLOCK_SIZE + i]) {
+        bits_needed++;
+      }
+    }
+    output->chunk_element_size[chunk_number] = bits_needed;
+    for (int i = 0; i < chunk_len; i++) {
+      unsigned char this_byte = binary_data[chunk_number * BLOCK_SIZE + i];
+      this_byte <<= (8 - bits_needed);
+      int bit_index = bits_needed * i;
+      // bool does_overflow = ((bit_index / 8) != ((bit_index + bits_necessary)
+      // / 8));
+      bool does_overflow = (bit_index % 8 + bits_needed > 8);
+      // clear array
+      output->chunk_data[chunk_number][i] = 0;
+      // write
+      output->chunk_data[chunk_number][bit_index / 8] |=
+          (this_byte >> (bit_index % 8));
+      if (does_overflow) {
+        output->chunk_data[chunk_number][bit_index / 8 + 1] |=
+            (this_byte << (8 - bit_index % 8));
+      }
+    }
+  }
+  return output;
+}
+
+#else
 
 __host__ struct fle_data *fle_compress(unsigned char *binary_data,
                                        unsigned long data_length) {
@@ -72,3 +121,4 @@ __host__ struct fle_data *fle_compress(unsigned char *binary_data,
 
   return output;
 }
+#endif /* ifdef CPU */

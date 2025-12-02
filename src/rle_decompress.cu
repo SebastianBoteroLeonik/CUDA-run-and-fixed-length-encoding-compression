@@ -97,6 +97,23 @@ __global__ void decompress_rle_kernel(char *uncompressed_data,
     */
 }
 
+#ifdef CPU
+
+__host__ unsigned char *decompress_rle(struct rle_data *compressed_data) {
+  unsigned char *data =
+      (unsigned char *)malloc(compressed_data->total_data_length);
+  int counter = 0;
+  for (int i = 0; i < compressed_data->compressed_array_length; i++) {
+    for (int j = 0; j <= compressed_data->repetitions[i]; j++) {
+      data[counter] = compressed_data->values[i];
+      counter++;
+    }
+  }
+  return data;
+}
+
+#else
+
 __host__ unsigned char *decompress_rle(struct rle_data *compressed_data) {
   INITIALIZE_CUDA_PERFORMANCE_CHECK(10)
   char *dev_uncompressed_data;
@@ -125,6 +142,7 @@ __host__ unsigned char *decompress_rle(struct rle_data *compressed_data) {
   CUDA_PERFORMANCE_CHECKPOINT(after_kernel)
   CUDA_ERROR_CHECK(cudaDeviceSynchronize());
   CUDA_ERROR_CHECK(cudaFree(dev_rle));
+  CUDA_ERROR_CHECK(cudaFree(repetitions_cumsums));
   CUDA_PERFORMANCE_CHECKPOINT(before_binary_memcpy)
   CUDA_ERROR_CHECK(cudaMemcpy(uncompressed_data, dev_uncompressed_data,
                               compressed_data->total_data_length,
@@ -135,3 +153,4 @@ __host__ unsigned char *decompress_rle(struct rle_data *compressed_data) {
   PRINT_AND_TERMINATE_CUDA_PERFORMANCE_CHECK()
   return uncompressed_data;
 }
+#endif /* ifdef CPU */

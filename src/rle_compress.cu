@@ -82,6 +82,45 @@ __global__ void write_rle(unsigned char *values, unsigned int *og_lengths,
   rle->compressed_array_length = len + overflows[len - 1];
 }
 
+#ifdef CPU
+
+__host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
+  int len = 1;
+  unsigned char reps = 0;
+  for (int i = 0; i < data_len - 1; i++) {
+    if (data[i] != data[i + 1]) {
+      len++;
+      reps = 0;
+    } else {
+      reps++;
+      if (reps == 255) {
+        len++;
+        reps = 0;
+      }
+    }
+  }
+  struct rle_data *rle = make_host_rle_data(len);
+  rle->compressed_array_length = len;
+  rle->total_data_length = data_len;
+  int j = 0;
+  reps = 0;
+  for (int i = 0; i < data_len; i++) {
+    if (i == data_len - 1 || data[i] != data[i + 1] || reps == 255) {
+      rle->values[j] = data[i];
+      rle->repetitions[j] = reps;
+      j++;
+      reps = 0;
+    } else {
+      reps++;
+    }
+  }
+  return rle;
+}
+
+#else
+
+#ifdef STREAMS
+
 struct rle_data_list_node {
   struct rle_data *dev_rle;
   int compressed_len;
@@ -136,30 +175,11 @@ void *binary_copier_thread(void *vptr) {
     }
     pthread_cond_broadcast(&shared_data->copy_cond);
     pthread_mutex_unlock(&shared_data->copy_mtx);
-    // fprintf(stderr, "Copied onto gpu %d bytes out of %lu\n",
-    //         shared_data->copied_bytes, shared_data->data_len);
   }
 
   CUDA_ERROR_CHECK(cudaStreamDestroy(stream));
   return NULL;
 }
-
-// __global__ void verify_dev_rle(struct rle_data *rle, int offset) {
-//   int reps = threadIdx.x ? 14 : 0;
-//   int vals = threadIdx.x ? 2 : 3;
-//   if (rle->repetitions[threadIdx.x] != reps) {
-//     printf("rle->reps[%d] = %d; should be %d; offset: %d\n", threadIdx.x,
-//            rle->repetitions[threadIdx.x], reps, offset);
-//   }
-//   if (rle->values[threadIdx.x] != vals) {
-//     printf("rle->vals[%d] = %d; should be %d; offset: %d\n", threadIdx.x,
-//            rle->values[threadIdx.x], vals, offset);
-//   }
-//   // printf("val[0]: %d\n", rle->values[0]);
-//   // printf("val[1]: %d\n", rle->values[1]);
-//   // printf("reps[0]: %d\n", rle->repetitions[0]);
-//   // printf("reps[1]: %d\n", rle->repetitions[1]);
-// }
 
 void *compressor_thread(void *vptr) {
   struct pthread_shared_data *shared_data = (struct pthread_shared_data *)vptr;
@@ -248,18 +268,14 @@ void *compressor_thread(void *vptr) {
       pthread_cond_broadcast(&shared_data->compression_cond);
     }
     pthread_mutex_unlock(&shared_data->compression_mtx);
-    // fprintf(stderr,
-    //         "processed %d bytes out of %lu; this step was %d bytes "
-    //         "long\n"
-    //         "all_copied: %d\nall_compressed: %d\n",
-    //         processed_bytes, shared_data->data_len, step_size, all_copied,
-    //         shared_data->all_compressed);
-    cudaFree(overflows);
-    cudaFree(values);
-    cudaFree(og_lengths);
+    CUDA_ERROR_CHECK(cudaFree(overflows));
+    CUDA_ERROR_CHECK(cudaFree(values));
+    CUDA_ERROR_CHECK(cudaFree(og_lengths));
   } while (!all_copied);
 
   CUDA_ERROR_CHECK(cudaStreamDestroy(stream));
+  CUDA_ERROR_CHECK(cudaFree(scan_array));
+  CUDA_ERROR_CHECK(cudaFree(shared_data->dev_data));
   return NULL;
 }
 
@@ -270,7 +286,6 @@ void *rle_copier_thread(void *vptr) {
   struct rle_data *dev_rle;
   int dev_compressed_len;
   int host_compressed_len = 0;
-  // bool all_compressed = false;
   pthread_mutex_lock(&shared_data->compression_mtx);
   if (!shared_data->all_compressed) {
     pthread_cond_wait(&shared_data->compression_cond,
@@ -285,21 +300,6 @@ void *rle_copier_thread(void *vptr) {
     struct rle_data_list_node *next_list_node = list_node->next;
     free(list_node);
     list_node = next_list_node;
-    // if (list_node) {
-    //   fprintf(stderr, "more\n");
-    // } else {
-    //   fprintf(stderr, "end\n");
-    // }
-    // fprintf(stderr, "host_compressed_len: %d\n", host_compressed_len);
-    // fprintf(stderr, "comp_tot_len: %d\n", shared_data->compressed_len_total);
-    // fprintf(stderr, "chunk_len: %d\n", dev_compressed_len);
-    // verify_dev_rle<<<1, 2>>>(dev_rle, 0);
-    // if (shared_data->host_rle->repetitions == shared_data->host_rle->values)
-    // {
-    //   fprintf(stderr, "same vec\n");
-    //   fprintf(stderr, "comp_len: %d\n", shared_data->compressed_len_total);
-    //   exit(EXIT_FAILURE);
-    // }
     struct rle_data dummy;
     CUDA_ERROR_CHECK(
         cudaMemcpy(&dummy, dev_rle, sizeof(dummy), cudaMemcpyDeviceToHost));
@@ -310,12 +310,6 @@ void *rle_copier_thread(void *vptr) {
     CUDA_ERROR_CHECK(cudaMemcpy(
         shared_data->host_rle->repetitions + host_compressed_len,
         dummy.repetitions, dev_compressed_len, cudaMemcpyDeviceToHost));
-    // copy_rle_data(dev_rle, shared_data->host_rle, DeviceToHost,
-    //               dev_compressed_len);
-    // printf("val[0]: %d\n", shared_data->host_rle->values[0]);
-    // printf("val[1]: %d\n", shared_data->host_rle->values[1]);
-    // printf("reps[0]: %d\n", shared_data->host_rle->repetitions[0]);
-    // printf("reps[1]: %d\n", shared_data->host_rle->repetitions[1]);
     host_compressed_len += dev_compressed_len;
     CUDA_ERROR_CHECK(cudaFree(dev_rle));
   }
@@ -352,7 +346,9 @@ __host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
   return shared_data.host_rle;
 }
 
-__host__ struct rle_data *compress_rle2(unsigned char *data, size_t data_len) {
+#else
+
+__host__ struct rle_data *compress_rle(unsigned char *data, size_t data_len) {
   INITIALIZE_CUDA_PERFORMANCE_CHECK(20)
   int number_of_blocks = CEIL_DEV(data_len, BLOCK_SIZE);
 
@@ -371,7 +367,6 @@ __host__ struct rle_data *compress_rle2(unsigned char *data, size_t data_len) {
       dev_data, scan_array, data_len);
 
   CUDA_PERFORMANCE_CHECKPOINT(recursive_cumsum)
-  // CUDA_ERROR_CHECK(cudaDeviceSynchronize());
   recursive_cumsum(scan_array, data_len);
   unsigned int compressed_len;
   CUDA_PERFORMANCE_CHECKPOINT(memcpy_comp_len)
@@ -385,8 +380,6 @@ __host__ struct rle_data *compress_rle2(unsigned char *data, size_t data_len) {
   CUDA_PERFORMANCE_CHECKPOINT(find_end)
   find_segment_end<<<number_of_blocks, BLOCK_SIZE>>>(scan_array, og_lengths,
                                                      data_len);
-  // CUDA_ERROR_CHECK(cudaDeviceSynchronize());
-
   unsigned int *overflows;
   unsigned char *values;
   CUDA_PERFORMANCE_CHECKPOINT(malloc_overflows_and_vals)
@@ -395,7 +388,6 @@ __host__ struct rle_data *compress_rle2(unsigned char *data, size_t data_len) {
   CUDA_PERFORMANCE_CHECKPOINT(sub_begining)
   subtract_segment_begining<<<number_of_blocks, BLOCK_SIZE>>>(
       scan_array, og_lengths, overflows, dev_data, values, data_len);
-  // CUDA_ERROR_CHECK(cudaDeviceSynchronize());
   CUDA_PERFORMANCE_CHECKPOINT(recursive_cumsum_overflows)
   recursive_cumsum(overflows, compressed_len);
   CUDA_PERFORMANCE_CHECKPOINT(after_recursive_cumsum_overflows)
@@ -419,8 +411,14 @@ __host__ struct rle_data *compress_rle2(unsigned char *data, size_t data_len) {
 
   CUDA_PERFORMANCE_CHECKPOINT(after_rle_copy)
   CUDA_ERROR_CHECK(cudaFree(dev_rle));
+  CUDA_ERROR_CHECK(cudaFree(og_lengths));
+  CUDA_ERROR_CHECK(cudaFree(overflows));
+  CUDA_ERROR_CHECK(cudaFree(values));
+  CUDA_ERROR_CHECK(cudaFree(scan_array));
   PRINT_AND_TERMINATE_CUDA_PERFORMANCE_CHECK()
   out_rle->total_data_length = data_len;
   out_rle->compressed_array_length = compressed_len + last_overflow;
   return out_rle;
 }
+#endif /* ifdef STREAMS */
+#endif /* ifdef CPU */
