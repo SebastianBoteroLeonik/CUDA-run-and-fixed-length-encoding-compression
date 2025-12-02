@@ -4,13 +4,13 @@
 #include <device_launch_parameters.h>
 
 __global__ void uchar_array_to_uint_array(unsigned char *chars,
-                                          unsigned int *llongs,
+                                          unsigned int *ints,
                                           unsigned int array_length) {
   const long long global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
   if (global_thread_id >= array_length) {
     return;
   }
-  llongs[global_thread_id] = chars[global_thread_id] + 1;
+  ints[global_thread_id] = chars[global_thread_id] + 1;
 }
 
 __host__ void cumsum_repetitions(unsigned int **result, struct rle_data *rle,
@@ -31,11 +31,11 @@ __host__ void cumsum_repetitions(unsigned int **result, struct rle_data *rle,
 }
 
 __global__ void decompress_rle_kernel(char *uncompressed_data,
-                                      struct rle_data *chunks,
+                                      struct rle_data *data,
                                       unsigned int *repetitions_cumsums,
                                       unsigned int compressed_array_length) {
 
-  const long long global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int global_thread_id = blockDim.x * blockIdx.x + threadIdx.x;
   // const int id = threadIdx.x;
   // const int block_id = blockIdx.x;
   // const unsigned int block_length =
@@ -50,9 +50,51 @@ __global__ void decompress_rle_kernel(char *uncompressed_data,
   } else {
     offset = repetitions_cumsums[global_thread_id - 1];
   }
-  for (int i = 0; i <= chunks->repetitions[global_thread_id]; i++) {
-    uncompressed_data[offset + i] = chunks->values[global_thread_id];
+  for (int i = 0; i <= data->repetitions[global_thread_id]; i++) {
+    uncompressed_data[offset + i] = data->values[global_thread_id];
   }
+
+  /* Nieudana próba optymalizacji dostępu do pamięci
+  __shared__ unsigned int offsets[BLOCK_SIZE + 1];
+  __shared__ unsigned char values[BLOCK_SIZE];
+  int block_len = blockDim.x * (blockIdx.x + 1) <= compressed_array_length
+                      ? blockDim.x
+                      : compressed_array_length % blockDim.x;
+  values[threadIdx.x] = data->values[global_thread_id];
+  offsets[threadIdx.x] =
+      global_thread_id ? repetitions_cumsums[global_thread_id - 1] : 0;
+  if (threadIdx.x == block_len - 1) {
+    offsets[block_len] = repetitions_cumsums[global_thread_id];
+  }
+  __syncthreads();
+  // printf("offset[tid]: %u, tid: %u, gtid: %u\n", offsets[threadIdx.x],
+  //        threadIdx.x, global_thread_id);
+  __shared__ int last_j;
+  for (unsigned int i = offsets[0] + threadIdx.x; i <= offsets[block_len];
+       i += block_len) {
+    unsigned int j = 0;
+    while (j < block_len && offsets[j + 1] < i) {
+      j++;
+    }
+    // if ((j + 1 + blockDim.x * blockIdx.x % 5) % 17 != values[j + 1]) {
+    //   // printf(
+    //   //     "i: %u, j: %u, off[j]: %u, off[j+1]: %u, blockDim.x: %u,
+    //   val[j+1]:
+    //   //     "
+    //   //     "%u\n",
+    //   //     i, j, offsets[j], offsets[j + 1], block_len, values[j + 1]);
+    //   printf("j: %u, j+1 mod 17: %u, val[j+1]: %u, block: %u\n", j,
+    //          (j + 1) % 17, values[j + 1], blockIdx.x);
+    // }
+    if (i > 0) {
+      uncompressed_data[i - 1] = values[j];
+    }
+    if (threadIdx.x == block_len - 1) {
+      last_j = j;
+    }
+    __syncthreads();
+    }
+    */
 }
 
 __host__ unsigned char *decompress_rle(struct rle_data *compressed_data) {
@@ -75,8 +117,9 @@ __host__ unsigned char *decompress_rle(struct rle_data *compressed_data) {
   cumsum_repetitions(&repetitions_cumsums, dev_rle,
                      compressed_data->compressed_array_length);
   CUDA_PERFORMANCE_CHECKPOINT(decompression_kernel)
-  decompress_rle_kernel<<<
-      CEIL_DEV(compressed_data->compressed_array_length, BLOCK_SIZE), 1024>>>(
+  decompress_rle_kernel<<<CEIL_DEV(compressed_data->compressed_array_length,
+                                   BLOCK_SIZE),
+                          BLOCK_SIZE>>>(
       dev_uncompressed_data, dev_rle, repetitions_cumsums,
       compressed_data->compressed_array_length);
   CUDA_PERFORMANCE_CHECKPOINT(after_kernel)
@@ -87,6 +130,7 @@ __host__ unsigned char *decompress_rle(struct rle_data *compressed_data) {
                               compressed_data->total_data_length,
                               cudaMemcpyDeviceToHost));
   CUDA_PERFORMANCE_CHECKPOINT(after_binary_memcpy)
+
   CUDA_ERROR_CHECK(cudaFree(dev_uncompressed_data));
   PRINT_AND_TERMINATE_CUDA_PERFORMANCE_CHECK()
   return uncompressed_data;

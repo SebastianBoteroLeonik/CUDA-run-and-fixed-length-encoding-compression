@@ -83,14 +83,14 @@ __host__ void recursive_cumsum(unsigned int *array, unsigned int array_len,
   if (array_len <= 1) {
     return;
   }
-  unsigned int next_arr_len = CEIL_DEV(array_len, BLOCK_SIZE);
+  int block_size = 512;
+  unsigned int next_arr_len = CEIL_DEV(array_len, block_size);
   unsigned int *next_array;
-  CUDA_ERROR_CHECK(
-      cudaMalloc(&next_array, next_arr_len * sizeof(*next_array)));
-  run_cumsum<<<next_arr_len, BLOCK_SIZE, 0, stream>>>(array, next_array,
+  CUDA_ERROR_CHECK(cudaMalloc(&next_array, next_arr_len * sizeof(*next_array)));
+  run_cumsum<<<next_arr_len, block_size, 0, stream>>>(array, next_array,
                                                       array_len);
   recursive_cumsum(next_array, next_arr_len, stream);
-  down_propagate_cumsum<<<next_arr_len - 1, BLOCK_SIZE, 0, stream>>>(
+  down_propagate_cumsum<<<next_arr_len - 1, block_size, 0, stream>>>(
       array, next_array, array_len);
   CUDA_ERROR_CHECK(cudaFree(next_array));
 }
