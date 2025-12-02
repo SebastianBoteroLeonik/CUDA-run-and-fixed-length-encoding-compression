@@ -32,6 +32,7 @@ __global__ void find_segment_end(unsigned int *scan_result,
   }
 }
 
+// Ta funkcja robi trochę więcej, bo nie ma co drugiego kernela odpalać
 __global__ void subtract_segment_begining(unsigned int *scan_result,
                                           unsigned *segment_lengths_out,
                                           unsigned int *overflows,
@@ -52,6 +53,8 @@ __global__ void subtract_segment_begining(unsigned int *scan_result,
   }
   if (previous_val != this_val) {
     segment_lengths_out[this_val] -= global_thread_id;
+
+    // Trochę więcej:
     overflows[this_val] = segment_lengths_out[this_val] / 256;
     compressed_data_vals[this_val] = data[global_thread_id];
   }
